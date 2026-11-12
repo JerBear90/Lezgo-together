@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { saveSet } from "@/lib/db";
 import { writeMembership } from "@/lib/rooms/membership";
+import { formatRoomCode } from "@/lib/rooms/model";
 import type { BrickSet } from "@/lib/types";
 import type { PlayerProfile } from "@/lib/types";
 
@@ -50,15 +51,15 @@ export function ShareRoom({ set, player }: { set: BrickSet; player: PlayerProfil
   }
 
   return (
-    <section className="rounded-3xl border border-line bg-card p-4">
+    <section className="rounded-3xl bg-white/15 p-4 text-white">
       <h2 className="font-display text-2xl">Build room</h2>
-      <p className="mt-1 text-sm text-muted">
+      <p className="mt-1 text-sm text-white/80">
         Share a short code. Friends on other phones join the same steps. No account.
       </p>
       {code ? (
         <div className="mt-3 space-y-3">
-          <p data-testid="room-code" className="font-display text-4xl tracking-[0.3em]">
-            {code}
+          <p data-testid="room-code" className="font-display text-5xl tracking-[0.2em]">
+            {formatRoomCode(code)}
           </p>
           {link ? (
             <p className="break-all text-sm">

@@ -10,8 +10,8 @@ import { useBrickSet } from "./use-set";
 import { RoomSync } from "./room-sync";
 import { ShareRoom } from "./share-room";
 import { createId } from "@/lib/ids";
-import { useEffect, useState } from "react";
-import { readMembership } from "@/lib/rooms/membership";
+import { useEffect, useRef, useState } from "react";
+import { clearMembership, readMembership, writeMembership } from "@/lib/rooms/membership";
 import type { RoomPlayer } from "@/lib/rooms/model";
 
 export function TogetherView({ id }: { id: string }) {
@@ -20,12 +20,17 @@ export function TogetherView({ id }: { id: string }) {
   const [roomPlayers, setRoomPlayers] = useState<RoomPlayer[]>([]);
   const [splitName, setSplitName] = useState("Cabin");
   const [splitStep, setSplitStep] = useState("");
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [handoffOk, setHandoffOk] = useState(false);
+  const [roomCode, setRoomCode] = useState<string | null>(null);
+  const queued = useRef(false);
 
   useEffect(() => {
     let stop = false;
     async function load() {
       const membership = readMembership();
       if (!membership || membership.setId !== id) return;
+      setRoomCode(membership.code);
       const response = await fetch(`/api/rooms/${membership.code}`);
       if (!response.ok || stop) return;
       const body = (await response.json()) as { room?: { players: RoomPlayer[] } };
@@ -41,6 +46,20 @@ export function TogetherView({ id }: { id: string }) {
 
   const roster = roomPlayers.length > 0 ? roomPlayers : players.map((player) => ({ ...player, lastSeenAt: 0 }));
 
+  useEffect(() => {
+    if (queued.current || !set || roster.length < 2) return;
+    if (set.sections.some((section) => section.assigneeId)) return;
+    queued.current = true;
+    const next = roster.reduce(
+      (current, person, index) => {
+        const section = current.sections[index];
+        return section ? assignSection(current, section.id, person.id) : current;
+      },
+      set,
+    );
+    commit(next);
+  }, [set, roster, commit]);
+
   if (loading) return <BenchLoading label="Opening the room" />;
   if (missing || !set || !active) {
     return (
@@ -52,13 +71,67 @@ export function TogetherView({ id }: { id: string }) {
   }
 
   const steps = orderedSteps(set.pages, set.steps);
+  const mineIndex = set.sections.findIndex((section) => section.assigneeId === active.id);
+  const previous = mineIndex > 0 ? set.sections[mineIndex - 1] : undefined;
+  const following = mineIndex >= 0 ? set.sections[mineIndex + 1] : undefined;
+  const previousName = roster.find((person) => person.id === previous?.assigneeId)?.name;
+  const followingName = roster.find((person) => person.id === following?.assigneeId)?.name;
+
+  async function leaveParty() {
+    const membership = readMembership();
+    if (membership) {
+      await fetch(`/api/rooms/${membership.code}?player=${encodeURIComponent(membership.playerId)}`, { method: "DELETE" });
+      clearMembership();
+    }
+    setRoomCode(null);
+    setLeaveOpen(false);
+  }
+
+  async function dropIn() {
+    if (!roomCode || !active || !set) return;
+    await fetch("/api/rooms/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: roomCode, player: active }),
+    });
+    writeMembership({ code: roomCode, playerId: active.id, setId: set.id });
+  }
   const placeNote = set.combine.certainty === "uncertain" ? set.combine.uncertaintyNote : null;
 
   return (
     <>
       <RoomSync setId={id} />
-      <TopBar title="Together" backHref={`/sets/${id}`} backLabel="Set" />
-      <main className="space-y-4 px-4 py-4">
+      <main className="together-lobby min-h-dvh space-y-4 px-4 py-4 text-white">
+        <div className="flex items-center justify-between">
+          <a href={`/sets/${id}`} className="text-sm font-extrabold text-white">
+            Set
+          </a>
+          <button type="button" className="text-sm font-extrabold" onClick={() => setLeaveOpen(true)}>
+            Leave
+          </button>
+        </div>
+        <p className="text-sm font-bold uppercase tracking-wide text-white/80">Build Together</p>
+        <h1 className="font-display text-4xl">{roster.length < 2 ? "Waiting for Builders" : "Start party!"}</h1>
+        <p data-testid="your-colour">Your colour is {colorName(active.color)}</p>
+        <div className="relative mx-auto h-48 w-48">
+          {set.coverDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={set.coverDataUrl} alt="" className="absolute inset-8 rounded-2xl object-cover" />
+          ) : null}
+          {roster.slice(0, 6).map((person, index) => (
+            <span
+              key={person.id}
+              className="absolute h-10 w-10 rounded-full border-2 border-white"
+              style={{
+                background: person.color,
+                left: `${50 + Math.cos((index / Math.max(roster.length, 1)) * Math.PI * 2) * 42}%`,
+                top: `${50 + Math.sin((index / Math.max(roster.length, 1)) * Math.PI * 2) * 42}%`,
+                transform: "translate(-50%, -50%)",
+              }}
+              title={person.name}
+            />
+          ))}
+        </div>
         <ShareRoom set={set} player={active} />
         <section className="rounded-3xl border border-line bg-card p-4">
           <h2 className="font-display text-2xl">Who is where</h2>
@@ -171,7 +244,56 @@ export function TogetherView({ id }: { id: string }) {
             Split section
           </button>
         </form>
+        {followingName && !handoffOk ? (
+          <p data-testid="give-banner" className="rounded-2xl bg-white px-3 py-3 font-bold text-ink">
+            Give to {followingName}{" "}
+            <button type="button" className="underline" onClick={() => setHandoffOk(true)}>
+              Confirm
+            </button>
+          </p>
+        ) : null}
+        {previousName ? (
+          <p data-testid="receive-banner" className="rounded-2xl bg-white px-3 py-3 font-bold text-ink">
+            Receive from {previousName}{" "}
+            <button type="button" className="underline" onClick={() => setHandoffOk(true)}>
+              Confirm
+            </button>
+          </p>
+        ) : null}
+        <div className="flex gap-2">
+          <button type="button" data-testid="drop-out" className="btn-lip px-4 py-2 text-sm font-extrabold text-ink" onClick={() => void leaveParty()}>
+            Drop out
+          </button>
+          <button type="button" data-testid="drop-in" className="btn-lip px-4 py-2 text-sm font-extrabold text-ink" onClick={() => void dropIn()}>
+            Drop in
+          </button>
+        </div>
+        {leaveOpen ? (
+          <div data-testid="leave-dialog" className="rounded-3xl bg-white p-4 text-ink">
+            <p className="font-extrabold">Leave this build?</p>
+            <div className="mt-3 flex gap-2">
+              <button type="button" className="btn-sun px-4 py-2 font-extrabold" onClick={() => void leaveParty()}>
+                Leave
+              </button>
+              <button type="button" className="btn-lip px-4 py-2 font-extrabold" onClick={() => setLeaveOpen(false)}>
+                Stay
+              </button>
+            </div>
+          </div>
+        ) : null}
       </main>
     </>
   );
+}
+
+function colorName(color: string): string {
+  const names: Record<string, string> = {
+    "#e23d2b": "red",
+    "#2f6fdd": "blue",
+    "#1d6b48": "green",
+    "#ef7d2a": "orange",
+    "#7a4cc2": "purple",
+    "#c2881a": "yellow",
+  };
+  return names[color.toLowerCase()] ?? "yellow";
 }

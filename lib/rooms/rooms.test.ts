@@ -4,7 +4,7 @@ import { emptyProgress } from "../player";
 import { savePlayerProgress } from "../sections";
 import { mergePlayerProgress, mergeSetSnapshot } from "./merge";
 import { resetMemoryRooms } from "./memory";
-import { DROP_AFTER_MS, MAX_PLAYERS } from "./model";
+import { DROP_AFTER_MS, MAX_PLAYERS, formatRoomCode, makeRoomCode } from "./model";
 import { createRoom, joinRoom, patchRoom, readRoom } from "./service";
 import { memoryRoomStore } from "./memory";
 import type { PlayerProfile } from "../types";
@@ -14,6 +14,11 @@ function player(id: string, name: string): PlayerProfile {
 }
 
 describe("room sync", () => {
+  it("shows a 6-digit code as two groups", () => {
+    expect(formatRoomCode("123456")).toBe("123 456");
+    expect(makeRoomCode(6, () => 0)).toBe("000000");
+  });
+
   afterEach(() => resetMemoryRooms());
 
   it("rejects an unknown code and an expired room", async () => {

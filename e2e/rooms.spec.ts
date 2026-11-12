@@ -22,7 +22,7 @@ test("two phones share a room and resume by code", async ({ browser }, testInfo)
   await host.getByTestId("set-card").click();
   await host.getByTestId("share-room").click();
   const code = (await host.getByTestId("room-code").textContent())?.trim() ?? "";
-  expect(code).toMatch(/^[A-Z0-9]{5}$/);
+  expect(code.replace(/\s/g, "")).toMatch(/^\d{6}$/);
   await shot(host, testInfo, "create-room");
 
   const guest = await open(guestContext);
