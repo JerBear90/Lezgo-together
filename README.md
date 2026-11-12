@@ -40,6 +40,36 @@ npm run test:e2e  # Playwright, demo mode, phone and desktop projects
 
 `npm run test:e2e` expects a production build (`npm run build`) because Playwright starts `npm run start`. The browser is Chromium. The phone project uses a 390×844 viewport.
 
+## Build together
+
+Players are names and a color on this device. No accounts and no passwords.
+
+One person opens **Together** and creates a room code (also a link and a QR code). Someone else opens **Join a room with a code**, types the code, and picks a name. If they use a name that was already in the room, they pick up that builder’s steps and checks. Each person’s place is saved as they move, including after the tab closes.
+
+Sections such as Hull and Cabin can be assigned to different people. If the reader cannot see where a section ends, or where the parts join, that boundary stays marked **Unsure**. The **Combine** step is where the sub-builds meet.
+
+### Where room data lives
+
+| Setup | What happens |
+| --- | --- |
+| No room env vars | Rooms stay in the server’s memory. Two browsers on `npm run dev` or `npm start` can share a code. On Vercel, each instance has its own memory, so two phones will not see each other. |
+| `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` | The room (steps, sections, and each player’s progress) is stored in Upstash Redis. Clients poll about every 1.5 seconds. |
+| `BLOB_READ_WRITE_TOKEN` | Instruction photos are uploaded to Vercel Blob and the room stores the URLs. |
+
+Upstash Redis and Vercel Blob both have free tiers. You are billed only if you pass those limits. This repo does not provision either one for you.
+
+### Set this up on Vercel
+
+1. Import the GitHub repo at [vercel.com/new](https://vercel.com/new). Framework: Next.js. Do not add a paid add-on during import.
+2. In the new project, open **Storage** → **Create** → **Upstash Redis** (Marketplace). Choose the free plan. Connect it to this project. Vercel writes `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
+3. **Storage** → **Create** → **Blob**. Choose the free Blob store and connect it. Vercel writes `BLOB_READ_WRITE_TOKEN`.
+4. Optional: **Settings → Environment Variables** → `AI_GATEWAY_API_KEY` if you want live booklet reading. Without it, demo mode still runs.
+5. Redeploy so the new variables are available. Do not commit `.env.local`.
+
+For local Redis or Blob, copy the same variable names into `.env.local` from the Vercel project (**Settings → Environment Variables**, or `vercel env pull`).
+
+Rooms expire after 24 hours. A code that does not exist returns “does not match”. A full room (6 people still present) asks you to wait. Someone who closes the app drops out of the seat after about 45 seconds; their checks stay, and joining again with the same name restores them. If two saves touch the same player at once, the later save wins and the other players’ checks are kept.
+
 ## Tests in CI
 
 `.github/workflows/ci.yml` runs on every pull request. It checks out the PR merged with the latest `main`, installs dependencies and Chromium, lints, runs the unit tests, builds, and runs Playwright. Screenshots from the end-to-end tests are uploaded as the `playwright-screenshots` artifact.

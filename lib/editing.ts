@@ -1,6 +1,7 @@
 import { canMarkPartCertain } from "./labels";
-import { emptyProgress, reconcileProgress } from "./player";
+import { normalizeProgress, reconcileProgress } from "./player";
 import { splitRegion, unionRegion } from "./region";
+import { attachPageSections, defaultCombine } from "./sections";
 import type {
   BrickSet,
   BuildStep,
@@ -9,6 +10,7 @@ import type {
   Part,
   ParsedExtraction,
   PartSpec,
+  SetProgress,
 } from "./types";
 
 export function createBlankSet(input: {
@@ -25,7 +27,9 @@ export function createBlankSet(input: {
     updatedAt: input.now,
     pages: [],
     steps: [],
-    progress: emptyProgress(),
+    progressByPlayer: {},
+    sections: [],
+    combine: defaultCombine(),
     sample: false,
   };
 }
@@ -64,16 +68,17 @@ export function applyPageExtraction(
         }
       : page,
   );
-  const steps = [
-    ...set.steps.filter((step) => step.pageId !== pageId),
-    ...toBuildSteps(pageId, parsed, id),
-  ];
+  const removed = new Set(set.steps.filter((step) => step.pageId === pageId).map((step) => step.id));
+  const added = toBuildSteps(pageId, parsed, id);
+  const steps = [...set.steps.filter((step) => step.pageId !== pageId), ...added];
   const ordered = orderedSteps(pages, steps);
   return {
     ...set,
     pages,
     steps,
-    progress: reconcileProgress(set.progress, ordered),
+    sections: attachPageSections(set.sections ?? [], removed, added, parsed.sections ?? [], id),
+    combine: parsed.combine ?? set.combine ?? defaultCombine(),
+    progressByPlayer: mapProgress(set, ordered, (progress) => progress),
   };
 }
 
@@ -127,8 +132,7 @@ export function replacePageImage(
 ): BrickSet {
   const removed = new Set(set.steps.filter((step) => step.pageId === pageId).map((step) => step.id));
   const steps = set.steps.filter((step) => step.pageId !== pageId);
-  const checkedByStep = { ...set.progress.checkedByStep };
-  for (const stepId of removed) delete checkedByStep[stepId];
+  const ordered = orderedSteps(set.pages, steps);
   return {
     ...set,
     pages: set.pages.map((page) =>
@@ -137,16 +141,18 @@ export function replacePageImage(
         : page,
     ),
     steps,
-    progress: reconcileProgress(
-      {
-        ...set.progress,
+    sections: (set.sections ?? [])
+      .map((section) => ({ ...section, stepIds: section.stepIds.filter((stepId) => !removed.has(stepId)) }))
+      .filter((section) => section.stepIds.length > 0),
+    progressByPlayer: mapProgress(set, ordered, (progress) => {
+      const checkedByStep = { ...progress.checkedByStep };
+      for (const stepId of removed) delete checkedByStep[stepId];
+      return {
+        ...progress,
         checkedByStep,
-        currentStepId: set.progress.currentStepId && removed.has(set.progress.currentStepId)
-          ? null
-          : set.progress.currentStepId,
-      },
-      orderedSteps(set.pages, steps),
-    ),
+        currentStepId: progress.currentStepId && removed.has(progress.currentStepId) ? null : progress.currentStepId,
+      };
+    }),
   };
 }
 
@@ -186,19 +192,26 @@ export function mergeSteps(set: BrickSet, index: number): BrickSet {
     placementNote: placementUncertain ? placementNote : null,
   };
   const nextSteps = [...steps.slice(0, index), merged, ...steps.slice(index + 2)];
-  const checks = new Set([
-    ...(set.progress.checkedByStep[first.id] ?? []),
-    ...(set.progress.checkedByStep[second.id] ?? []),
-  ]);
-  const checkedByStep = { ...set.progress.checkedByStep };
-  delete checkedByStep[second.id];
-  const kept = [...checks].filter((partId) => merged.parts.some((part) => part.id === partId));
-  if (kept.length > 0) checkedByStep[first.id] = kept;
-  else delete checkedByStep[first.id];
   return {
     ...set,
     steps: nextSteps,
-    progress: reconcileProgress({ ...set.progress, checkedByStep, currentStepId: merged.id }, nextSteps),
+    sections: retargetSections(set.sections, new Map([[second.id, first.id]])),
+    progressByPlayer: mapProgress(set, nextSteps, (progress) => {
+      const checks = new Set([
+        ...(progress.checkedByStep[first.id] ?? []),
+        ...(progress.checkedByStep[second.id] ?? []),
+      ]);
+      const checkedByStep = { ...progress.checkedByStep };
+      delete checkedByStep[second.id];
+      const kept = [...checks].filter((partId) => merged.parts.some((part) => part.id === partId));
+      if (kept.length > 0) checkedByStep[first.id] = kept;
+      else delete checkedByStep[first.id];
+      const current =
+        progress.currentStepId === first.id || progress.currentStepId === second.id
+          ? first.id
+          : progress.currentStepId;
+      return { ...progress, checkedByStep, currentStepId: current };
+    }),
   };
 }
 
@@ -222,14 +235,23 @@ export function splitStep(set: BrickSet, index: number, newId: string): BrickSet
   };
   const nextSteps = [...steps.slice(0, index), first, second, ...steps.slice(index + 1)];
   const secondIds = new Set(secondParts.map((part) => part.id));
-  const checked = set.progress.checkedByStep[step.id] ?? [];
-  const checkedByStep = { ...set.progress.checkedByStep };
-  const stay = checked.filter((partId) => !secondIds.has(partId));
-  const moved = checked.filter((partId) => secondIds.has(partId));
-  if (stay.length > 0) checkedByStep[step.id] = stay;
-  else delete checkedByStep[step.id];
-  if (moved.length > 0) checkedByStep[newId] = moved;
-  return { ...set, steps: nextSteps, progress: { ...set.progress, checkedByStep } };
+  return {
+    ...set,
+    steps: nextSteps,
+    sections: (set.sections ?? []).map((section) =>
+      section.stepIds.includes(step.id) ? { ...section, stepIds: [...section.stepIds, newId] } : section,
+    ),
+    progressByPlayer: mapProgress(set, nextSteps, (progress) => {
+      const checked = progress.checkedByStep[step.id] ?? [];
+      const checkedByStep = { ...progress.checkedByStep };
+      const stay = checked.filter((partId) => !secondIds.has(partId));
+      const moved = checked.filter((partId) => secondIds.has(partId));
+      if (stay.length > 0) checkedByStep[step.id] = stay;
+      else delete checkedByStep[step.id];
+      if (moved.length > 0) checkedByStep[newId] = moved;
+      return { ...progress, checkedByStep };
+    }),
+  };
 }
 
 export function updateStep(
@@ -298,30 +320,57 @@ export function removePart(set: BrickSet, stepId: string, partId: string): Brick
   const steps = set.steps.map((step) =>
     step.id === stepId ? { ...step, parts: step.parts.filter((part) => part.id !== partId) } : step,
   );
-  const checked = (set.progress.checkedByStep[stepId] ?? []).filter((id) => id !== partId);
-  const checkedByStep = { ...set.progress.checkedByStep };
-  if (checked.length > 0) checkedByStep[stepId] = checked;
-  else delete checkedByStep[stepId];
-  return { ...set, steps, progress: { ...set.progress, checkedByStep } };
+  return {
+    ...set,
+    steps,
+    progressByPlayer: mapProgress(set, steps, (progress) => {
+      const checked = (progress.checkedByStep[stepId] ?? []).filter((id) => id !== partId);
+      const checkedByStep = { ...progress.checkedByStep };
+      if (checked.length > 0) checkedByStep[stepId] = checked;
+      else delete checkedByStep[stepId];
+      return { ...progress, checkedByStep };
+    }),
+  };
 }
 
 export function deleteStep(set: BrickSet, stepId: string): BrickSet {
   const steps = set.steps.filter((step) => step.id !== stepId);
-  const checkedByStep = { ...set.progress.checkedByStep };
-  delete checkedByStep[stepId];
   const ordered = orderedSteps(set.pages, steps);
   return {
     ...set,
     steps,
-    progress: reconcileProgress(
-      {
-        ...set.progress,
+    sections: (set.sections ?? [])
+      .map((section) => ({ ...section, stepIds: section.stepIds.filter((id) => id !== stepId) }))
+      .filter((section) => section.stepIds.length > 0),
+    progressByPlayer: mapProgress(set, ordered, (progress) => {
+      const checkedByStep = { ...progress.checkedByStep };
+      delete checkedByStep[stepId];
+      return {
+        ...progress,
         checkedByStep,
-        currentStepId: set.progress.currentStepId === stepId ? null : set.progress.currentStepId,
-      },
-      ordered,
-    ),
+        currentStepId: progress.currentStepId === stepId ? null : progress.currentStepId,
+      };
+    }),
   };
+}
+
+function mapProgress(
+  set: BrickSet,
+  steps: BuildStep[],
+  update: (progress: SetProgress) => SetProgress,
+): BrickSet["progressByPlayer"] {
+  const next: BrickSet["progressByPlayer"] = {};
+  for (const [playerId, progress] of Object.entries(set.progressByPlayer ?? {})) {
+    next[playerId] = reconcileProgress(update(normalizeProgress(progress)), steps);
+  }
+  return next;
+}
+
+function retargetSections(sections: BrickSet["sections"], replacements: Map<string, string>): BrickSet["sections"] {
+  return (sections ?? []).map((section) => ({
+    ...section,
+    stepIds: [...new Set(section.stepIds.map((id) => replacements.get(id) ?? id))],
+  }));
 }
 
 export function addBlankStep(set: BrickSet, pageId: string, stepId: string): BrickSet {

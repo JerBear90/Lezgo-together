@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { orderedSteps } from "@/lib/editing";
 import { placementLabel, retakeMessage, uncertaintyLabel } from "@/lib/labels";
 import { quantityLabel } from "@/lib/parts";
 import {
   allPartsChecked,
   applySwipe,
   checkedIds,
+  emptyProgress,
   goBack,
   goNext,
   jumpTo,
@@ -16,50 +16,72 @@ import {
   stepIndex,
   togglePart,
 } from "@/lib/player";
+import { isCombineStep, playableSteps, progressFor, savePlayerProgress } from "@/lib/sections";
 import { BenchLoading, ColorDot, ProgressBar, UnsureBadge } from "./ui";
+import { RoomSync } from "./room-sync";
+import { usePlayers } from "./use-players";
 import { useBrickSet } from "./use-set";
 import { StepImage } from "./step-view";
 
 export function StepPlayer({ id }: { id: string }) {
   const { set, loading, missing, commit, snapshot } = useBrickSet(id);
+  const { active } = usePlayers();
   const [jumpOpen, setJumpOpen] = useState(false);
   const drag = useRef<{ x: number; y: number; pointerId: number } | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const started = useRef(false);
+  const sheetRef = useRef<HTMLElement>(null);
+  const imageRef = useRef<HTMLDivElement>(null);
+  const started = useRef<string | null>(null);
 
-  const steps = set ? orderedSteps(set.pages, set.steps) : [];
-  const index = set ? stepIndex(steps, set.progress.currentStepId) : 0;
+  const progress = set && active ? progressFor(set, active.id) : emptyProgress();
+  const steps = set && active ? playableSteps(set, active.id) : [];
+  const index = stepIndex(steps, progress.currentStepId);
   const step = steps[index];
 
+  function writeProgress(nextProgress: typeof progress) {
+    const current = snapshot();
+    if (!current || !active) return;
+    void commit(savePlayerProgress(current, active.id, nextProgress));
+  }
+
   useEffect(() => {
-    if (started.current) return;
+    if (!active) return;
+    if (started.current === active.id) return;
     const current = snapshot();
     if (!current) return;
-    const ordered = orderedSteps(current.pages, current.steps);
+    const ordered = playableSteps(current, active.id);
     if (ordered.length === 0) return;
-    started.current = true;
-    if (!current.progress.currentStepId) {
-      commit({ ...current, progress: { ...current.progress, currentStepId: ordered[0].id } });
+    const mine = progressFor(current, active.id);
+    const visible = ordered.some((item) => item.id === mine.currentStepId) ? mine.currentStepId : ordered[0].id;
+    if (mine.currentStepId !== visible) {
+      writeProgress({ ...mine, currentStepId: visible });
     }
-  }, [set, commit, snapshot]);
+    if (started.current === active.id) return;
+    started.current = active.id;
+    // Restore scroll and zoom once this player's build opens.
+    requestAnimationFrame(() => {
+      if (sheetRef.current) sheetRef.current.scrollTop = mine.sheetScrollTop;
+      if (imageRef.current) imageRef.current.scrollTop = mine.imageScrollTop;
+    });
+    // writeProgress closes over the latest snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [set, active, commit, snapshot]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       const current = snapshot();
-      if (!current) return;
-      const ordered = orderedSteps(current.pages, current.steps);
-      if (event.key === "ArrowRight") {
-        commit({ ...current, progress: goNext(ordered, current.progress) });
-      }
-      if (event.key === "ArrowLeft") {
-        commit({ ...current, progress: goBack(ordered, current.progress) });
-      }
+      if (!current || !active) return;
+      const ordered = playableSteps(current, active.id);
+      const mine = progressFor(current, active.id);
+      if (event.key === "ArrowRight") writeProgress(goNext(ordered, mine));
+      if (event.key === "ArrowLeft") writeProgress(goBack(ordered, mine));
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [commit, snapshot]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commit, snapshot, active]);
 
-  if (loading) return <BenchLoading label="Opening the build" />;
+  if (loading || !active) return <BenchLoading label="Opening the build" />;
   if (missing || !set) {
     return (
       <p className="px-4 py-8">
@@ -79,22 +101,23 @@ export function StepPlayer({ id }: { id: string }) {
   }
 
   const page = set.pages.find((item) => item.id === step.pageId);
-  const checked = checkedIds(set.progress, step.id);
+  const checked = checkedIds(progress, step.id);
   const place = placementLabel(step);
   const retake = page ? retakeMessage(page.retake) : null;
   const fraction = progressFraction(steps, step.id);
 
   function move(direction: "next" | "back") {
     const current = snapshot();
-    if (!current) return;
-    const ordered = orderedSteps(current.pages, current.steps);
-    const progress = direction === "next" ? goNext(ordered, current.progress) : goBack(ordered, current.progress);
-    commit({ ...current, progress });
+    if (!current || !active) return;
+    const ordered = playableSteps(current, active.id);
+    const mine = progressFor(current, active.id);
+    writeProgress(direction === "next" ? goNext(ordered, mine) : goBack(ordered, mine));
     headingRef.current?.focus();
   }
 
   return (
-    <div className="flex h-dvh flex-col" data-testid="step-player">
+    <div className="flex h-full flex-col" data-testid="step-player" data-zoom={progress.zoom}>
+      <RoomSync setId={id} />
       <header className="flex items-center gap-3 px-4 py-3">
         <Link href={`/sets/${id}`} className="text-sm font-semibold text-brick-dark">
           Set
@@ -108,7 +131,8 @@ export function StepPlayer({ id }: { id: string }) {
         <ProgressBar value={fraction * steps.length} max={steps.length} label="Build progress" />
       </div>
       <div
-        className="relative mt-3 min-h-48 flex-1"
+        ref={imageRef}
+        className="relative mt-3 min-h-48 flex-1 overflow-auto"
         onPointerDown={(event) => {
           drag.current = { x: event.clientX, y: event.clientY, pointerId: event.pointerId };
         }}
@@ -118,17 +142,55 @@ export function StepPlayer({ id }: { id: string }) {
           const dy = event.clientY - drag.current.y;
           drag.current = null;
           const current = snapshot();
-          if (!current) return;
-          const ordered = orderedSteps(current.pages, current.steps);
-          const progress = applySwipe(ordered, current.progress, dx, dy);
-          if (progress.currentStepId !== current.progress.currentStepId) {
-            commit({ ...current, progress });
-          }
+          if (!current || !active) return;
+          const ordered = playableSteps(current, active.id);
+          const mine = progressFor(current, active.id);
+          const next = applySwipe(ordered, mine, dx, dy);
+          if (next.currentStepId !== mine.currentStepId) writeProgress(next);
+        }}
+        onScroll={() => {
+          const current = snapshot();
+          if (!current || !active || !imageRef.current) return;
+          const mine = progressFor(current, active.id);
+          writeProgress({ ...mine, imageScrollTop: imageRef.current.scrollTop });
         }}
       >
-        {page ? <StepImage src={page.imageDataUrl} region={step.region} alt={step.description} /> : null}
+        <div style={{ transform: `scale(${progress.zoom})`, transformOrigin: "top center" }}>
+          {page ? <StepImage src={page.imageDataUrl} region={step.region} alt={step.description} /> : null}
+          {isCombineStep(step) && set.coverDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={set.coverDataUrl} alt="" className="mx-auto max-h-64 object-contain" />
+          ) : null}
+        </div>
+        <div className="absolute bottom-2 right-2 flex gap-1">
+          <button
+            type="button"
+            data-testid="zoom-out"
+            className="h-9 w-9 rounded-full bg-card font-semibold"
+            onClick={() => writeProgress({ ...progress, zoom: Math.max(1, progress.zoom - 0.5) })}
+          >
+            −
+          </button>
+          <button
+            type="button"
+            data-testid="zoom-in"
+            className="h-9 w-9 rounded-full bg-card font-semibold"
+            onClick={() => writeProgress({ ...progress, zoom: Math.min(2.5, progress.zoom + 0.5) })}
+          >
+            +
+          </button>
+        </div>
       </div>
-      <section className="max-h-[50%] space-y-3 overflow-y-auto px-4 py-3">
+      <section
+        ref={sheetRef}
+        className="max-h-[50%] space-y-3 overflow-y-auto px-4 py-3"
+        onScroll={() => {
+          const current = snapshot();
+          if (!current || !active || !sheetRef.current) return;
+          const mine = progressFor(current, active.id);
+          writeProgress({ ...mine, sheetScrollTop: sheetRef.current.scrollTop });
+        }}
+      >
         {retake ? (
           <p className="rounded-2xl bg-[#fff1ec] px-3 py-2 text-sm text-brick-dark">
             Retake this photo. {retake}{" "}
@@ -144,7 +206,7 @@ export function StepPlayer({ id }: { id: string }) {
           </p>
         ) : null}
         <h1 ref={headingRef} tabIndex={-1} data-testid="step-heading" className="font-display text-4xl outline-none">
-          Step {step.stepNumber}
+          {isCombineStep(step) ? "Combine" : `Step ${step.stepNumber}`}
         </h1>
         <p>{step.description}</p>
         <ul className="space-y-2">
@@ -160,11 +222,8 @@ export function StepPlayer({ id }: { id: string }) {
                   aria-pressed={on}
                   onClick={() => {
                     const current = snapshot();
-                    if (!current) return;
-                    commit({
-                      ...current,
-                      progress: togglePart(current.progress, step.id, part.id),
-                    });
+                    if (!current || !active) return;
+                    writeProgress(togglePart(progressFor(current, active.id), step.id, part.id));
                   }}
                   className="flex w-full items-start gap-3 rounded-2xl border border-line bg-card px-3 py-3 text-left"
                 >
@@ -229,8 +288,8 @@ export function StepPlayer({ id }: { id: string }) {
                   type="button"
                   onClick={() => {
                     const current = snapshot();
-                    if (!current) return;
-                    commit({ ...current, progress: jumpTo(steps, current.progress, itemIndex) });
+                    if (!current || !active) return;
+                    writeProgress(jumpTo(steps, progressFor(current, active.id), itemIndex));
                     setJumpOpen(false);
                   }}
                   className={`min-h-11 w-full rounded-xl ${item.id === step.id ? "bg-ink text-paper" : "bg-card"}`}

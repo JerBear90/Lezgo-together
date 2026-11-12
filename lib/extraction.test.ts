@@ -224,6 +224,51 @@ describe("parseExtraction", () => {
     expect(EXTRACTION_INSTRUCTIONS).toMatch(/Do not guess/);
     expect(EXTRACTION_INSTRUCTIONS).toMatch(/too blurry/);
     expect(EXTRACTION_INSTRUCTIONS).toMatch(/retake\.needed/);
+    expect(EXTRACTION_INSTRUCTIONS).toMatch(/Do not guess a split/);
+    expect(EXTRACTION_INSTRUCTIONS).toMatch(/Do not invent a joining step/);
+  });
+
+  it("keeps an unclear sub-build boundary unsure instead of inventing one", () => {
+    const parsed = parseExtraction({
+      pageSummary: "Two groups",
+      retake: { needed: false, reasons: [] },
+      steps: [
+        {
+          stepNumber: 1,
+          description: "Lay the red hull bricks.",
+          placementCertainty: "certain",
+          placementNote: null,
+          region: null,
+          parts: [certainPart],
+        },
+        {
+          stepNumber: 2,
+          description: "Add the next bricks.",
+          placementCertainty: "certain",
+          placementNote: null,
+          region: null,
+          parts: [certainPart],
+        },
+      ],
+      sections: [
+        {
+          name: "Hull",
+          stepNumbers: [1],
+          certainty: "certain",
+          uncertaintyNote: "Cannot tell whether step 2 still belongs to the hull.",
+        },
+      ],
+      combine: {
+        description: "Maybe the cabin sits on the hull.",
+        certainty: "certain",
+        uncertaintyNote: null,
+      },
+    });
+    expect(parsed.sections[0]?.certainty).toBe("uncertain");
+    expect(parsed.sections[0]?.name).toBe("Hull");
+    expect(parsed.sections.map((section) => section.name)).toEqual(["Hull"]);
+    expect(parsed.combine.certainty).toBe("uncertain");
+    expect(parsed.combine.description).toMatch(/Maybe/);
   });
 });
 
