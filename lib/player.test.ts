@@ -168,6 +168,8 @@ describe("players and sections", () => {
     expect(playableSteps(set, "ada").map((item) => item.stepNumber)).toEqual([1, 2, 0]);
     expect(playableSteps(set, "bea").map((item) => item.id)).toEqual(["s3", "combine:set"]);
     expect(playableSteps(set, "bea")[1]?.placementCertainty).toBe(set.combine.certainty);
+    const solo = assignSection(assignSection(set, "cabin", null), "hull", "ada");
+    expect(playableSteps(solo, "ada").map((item) => item.stepNumber)).toEqual([1, 2, 3, 0]);
     const split = splitOffSection(set, "s2", "Deck", "deck");
     expect(split.sections.map((section) => section.name)).toEqual(["Hull", "Cabin", "Deck"]);
     expect(split.sections.find((section) => section.name === "Hull")?.stepIds).toEqual(["s1"]);

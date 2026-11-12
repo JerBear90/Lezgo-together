@@ -43,9 +43,9 @@ export function combineAsStep(set: BrickSet): BuildStep {
 export function playableSteps(set: BrickSet, playerId: string | null): BuildStep[] {
   const ordered = orderSteps(set.pages, set.steps);
   const sections = set.sections ?? [];
-  const assigned = sections.some((section) => section.assigneeId);
+  const assigneeIds = [...new Set(sections.map((section) => section.assigneeId).filter((id): id is string => Boolean(id)))];
   let mine = ordered;
-  if (assigned && playerId) {
+  if (assigneeIds.length >= 2 && playerId && assigneeIds.includes(playerId)) {
     const ids = new Set(
       sections.filter((section) => section.assigneeId === playerId).flatMap((section) => section.stepIds),
     );

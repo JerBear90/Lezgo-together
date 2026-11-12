@@ -22,10 +22,32 @@ describe("room sync", () => {
   it("counts only people who joined the room", () => {
     const local = [{ id: "a" }, { id: "b" }];
     expect(lobbyMembers(null, local)).toEqual([]);
-    expect(partyHeadline(0)).toBe("Waiting for Builders");
-    expect(partyHeadline(1)).toBe("Waiting for Builders");
+    expect(partyHeadline(0)).toBe("Build solo or invite friends");
+    expect(partyHeadline(1)).toBe("Build solo or invite friends");
     expect(lobbyMembers("123456", local)).toEqual(local);
     expect(partyHeadline(2)).toBe("Start party!");
+  });
+
+  it("lets one builder open a room and finish a step", async () => {
+    const now = 20_000;
+    const room = await createRoom(buildDemoSet(now), player("solo", "Builder"), now);
+    expect(room.players).toHaveLength(1);
+    const done = await patchRoom(
+      room.code,
+      {
+        playerId: "solo",
+        progress: {
+          ...emptyProgress(),
+          currentStepId: "demo-step-2",
+          checkedByStep: { "demo-step-1": ["demo-step-1-p1"] },
+          updatedAt: now + 5,
+        },
+      },
+      now + 5,
+    );
+    expect(done.players).toHaveLength(1);
+    expect(done.set.progressByPlayer.solo.currentStepId).toBe("demo-step-2");
+    expect(done.set.progressByPlayer.solo.checkedByStep["demo-step-1"]).toEqual(["demo-step-1-p1"]);
   });
 
   afterEach(() => resetMemoryRooms());

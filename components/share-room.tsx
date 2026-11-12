@@ -54,7 +54,7 @@ export function ShareRoom({ set, player }: { set: BrickSet; player: PlayerProfil
     <section className="rounded-3xl bg-white/15 p-4 text-white">
       <h2 className="font-display text-2xl">Build room</h2>
       <p className="mt-1 text-sm text-white/80">
-        Share a short code. Friends on other phones join the same steps. No account.
+        Optional invite. Share a short code if a friend wants to join. No account.
       </p>
       {code ? (
         <div className="mt-3 space-y-3">
