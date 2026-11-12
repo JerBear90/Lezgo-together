@@ -46,7 +46,7 @@ export function lobbyMembers<T>(roomCode: string | null, members: T[]): T[] {
 }
 
 export function partyHeadline(memberCount: number): string {
-  return memberCount < 2 ? "Waiting for Builders" : "Start party!";
+  return memberCount < 2 ? "Build solo or invite friends" : "Start party!";
 }
 
 export function formatRoomCode(code: string): string {

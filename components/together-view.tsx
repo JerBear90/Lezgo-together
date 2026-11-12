@@ -11,6 +11,7 @@ import { useBrickSet } from "./use-set";
 import { RoomSync } from "./room-sync";
 import { ShareRoom } from "./share-room";
 import { createId } from "@/lib/ids";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { clearMembership, readMembership, writeMembership } from "@/lib/rooms/membership";
 import { lobbyMembers, partyHeadline, type RoomPlayer } from "@/lib/rooms/model";
@@ -71,6 +72,9 @@ export function TogetherView({ id }: { id: string }) {
   if (missing || !set) return <MissingSet />;
 
   const steps = orderedSteps(set.pages, set.steps);
+  const assignable = roster.some((person) => person.id === active.id)
+    ? roster
+    : [{ id: active.id, name: active.name, color: active.color, lastSeenAt: 0 }, ...roster];
   const mineIndex = set.sections.findIndex((section) => section.assigneeId === active.id);
   const previous = mineIndex > 0 ? set.sections[mineIndex - 1] : undefined;
   const following = mineIndex >= 0 ? set.sections[mineIndex + 1] : undefined;
@@ -101,7 +105,7 @@ export function TogetherView({ id }: { id: string }) {
   return (
     <>
       <RoomSync setId={id} />
-      <main className="together-lobby min-h-dvh space-y-4 px-4 py-4 text-white">
+      <main className="together-lobby min-h-dvh space-y-3 px-4 py-3 text-white">
         <div className="flex items-center justify-between">
           <a href={`/sets/${id}`} className="text-sm font-extrabold text-white">
             Set
@@ -112,11 +116,16 @@ export function TogetherView({ id }: { id: string }) {
         </div>
         <p className="text-sm font-bold uppercase tracking-wide text-white/80">Build Together</p>
         <h1 className="font-display text-4xl">{partyHeadline(roster.length)}</h1>
+        {roster.length < 2 ? (
+          <Link href={`/sets/${id}/play`} data-testid="start-building" className="btn-sun flex min-h-14 items-center justify-center font-extrabold">
+            Start building
+          </Link>
+        ) : null}
         <p data-testid="your-colour">Your colour is {colorName(active.color)}</p>
-        <div className="relative mx-auto h-48 w-48">
+        <div className="relative mx-auto h-16 w-16">
           {set.coverDataUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={set.coverDataUrl} alt="" className="absolute inset-8 rounded-2xl object-cover" />
+            <img src={set.coverDataUrl} alt="" className="absolute inset-3 rounded-2xl object-cover" />
           ) : null}
           {roster.slice(0, 6).map((person, index) => (
             <span
@@ -185,7 +194,7 @@ export function TogetherView({ id }: { id: string }) {
                     }}
                   >
                     <option value="">Nobody yet</option>
-                    {roster.map((player) => (
+                    {assignable.map((player) => (
                       <option key={player.id} value={player.id}>
                         {player.name}
                       </option>

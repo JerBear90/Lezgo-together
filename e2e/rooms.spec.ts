@@ -73,3 +73,25 @@ test("two phones share a room and resume by code", async ({ browser }, testInfo)
   await hostContext.close();
   await returned.close();
 });
+
+test("a solo builder can open a room, start, and finish a step", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTestId("load-sample").click();
+  await page.goto("/sets/demo-harbor-tug");
+  await page.getByTestId("nav-play").click();
+  await expect(page.getByTestId("step-heading")).toHaveText("Step 1");
+  await page.goto("/sets/demo-harbor-tug/together");
+  await expect(page.getByRole("heading", { name: "Build solo or invite friends" })).toBeVisible();
+  await expect(page.getByText("Waiting for Builders")).toHaveCount(0);
+  await page.getByRole("button", { name: "Create room code" }).click();
+  const code = (await page.getByTestId("room-code").textContent())?.trim() ?? "";
+  expect(code.replace(/\s/g, "")).toMatch(/^\d{6}$/);
+  await expect(page.getByTestId("room-qr")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Build solo or invite friends" })).toBeVisible();
+  await page.getByTestId("start-building").click();
+  await expect(page.getByTestId("step-heading")).toHaveText("Step 1");
+  await page.getByTestId("part-check").first().click();
+  await expect(page.getByTestId("part-check").first()).toHaveAttribute("aria-pressed", "true");
+  await page.getByTestId("step-next").click();
+  await expect(page.getByTestId("step-heading")).toHaveText("Step 2");
+});
