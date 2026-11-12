@@ -59,6 +59,9 @@ test("fits the step model inside the stage at phone pixel ratios", async ({ brow
       await expectFit(page, step === 2);
       await expectNoticeFullyVisible(page);
       await expectChipsVisible(page);
+      await expectPinnedToBottom(page);
+      await expectZoomClear(page);
+      await expectNotesUnclipped(page);
       if (step === 5) await expectCalloutClear(page);
       if (step < 6) await page.getByTestId("step-next").click();
     }
@@ -109,8 +112,14 @@ async function expectFit(page: Page, flat: boolean) {
   const heightFill = (fit.bottom - fit.top) / fit.stageH;
   expect(Math.max(widthFill, heightFill)).toBeGreaterThanOrEqual(0.55);
   if (flat) expect(widthFill).toBeGreaterThanOrEqual(0.65);
+  const tools = await page.getByTestId("zoom-controls").boundingBox();
+  if (!tools) throw new Error("The zoom controls have no box.");
+  const stageTop = (await page.getByTestId("step-diagram").boundingBox())?.y ?? 0;
+  const usableTop = tools.y + tools.height - stageTop;
+  const usableMid = usableTop + (fit.stageH - usableTop) / 2;
   const mid = (fit.top + fit.bottom) / 2;
-  expect(Math.abs(mid - fit.stageH / 2)).toBeLessThan(fit.stageH * 0.14);
+  expect(fit.top).toBeGreaterThanOrEqual(usableTop - 2);
+  expect(Math.abs(mid - usableMid)).toBeLessThan(fit.stageH * 0.16);
 }
 
 async function expectNoticeFullyVisible(page: Page) {
@@ -145,6 +154,54 @@ async function expectNoticeFullyVisible(page: Page) {
 
 function bounds(box: { x: number; y: number; width: number; height: number }) {
   return { left: box.x, top: box.y, right: box.x + box.width, bottom: box.y + box.height };
+}
+
+async function expectPinnedToBottom(page: Page) {
+  const gap = await page.evaluate(() => {
+    const slider = document.querySelector(".stage-slider");
+    if (!slider) return 999;
+    return window.innerHeight - slider.getBoundingClientRect().bottom;
+  });
+  expect(gap).toBeGreaterThanOrEqual(0);
+  expect(gap).toBeLessThan(40);
+}
+
+async function expectZoomClear(page: Page) {
+  const hit = await page.evaluate(() => {
+    const tools = document.querySelector("[data-testid='zoom-controls']");
+    const diagram = document.querySelector("[data-testid='step-diagram']");
+    if (!tools || !diagram) return true;
+    const stage = diagram.getBoundingClientRect();
+    const tool = tools.getBoundingClientRect();
+    const model = {
+      left: stage.left + Number(diagram.getAttribute("data-model-left")),
+      top: stage.top + Number(diagram.getAttribute("data-model-top")),
+      right: stage.left + Number(diagram.getAttribute("data-model-right")),
+      bottom: stage.top + Number(diagram.getAttribute("data-model-bottom")),
+    };
+    const boxes = [
+      model,
+      ...[...document.querySelectorAll("[data-testid='arrow-label']")].map((node) => {
+        const box = node.getBoundingClientRect();
+        return { left: box.left, top: box.top, right: box.right, bottom: box.bottom };
+      }),
+    ];
+    const toolBox = { left: tool.left, top: tool.top, right: tool.right, bottom: tool.bottom };
+    return boxes.some(
+      (box) => box.left < toolBox.right - 2 && box.right > toolBox.left + 2 && box.top < toolBox.bottom - 2 && box.bottom > toolBox.top + 2,
+    );
+  });
+  expect(hit).toBe(false);
+}
+
+async function expectNotesUnclipped(page: Page) {
+  const clipped = await page.evaluate(() => {
+    const notes = document.querySelector("[data-testid='step-notes']");
+    if (!notes) return true;
+    const box = notes.getBoundingClientRect();
+    return notes.scrollHeight > notes.clientHeight + 2 || box.top < 0 || box.bottom > window.innerHeight + 1;
+  });
+  expect(clipped).toBe(false);
 }
 
 async function expectChipsVisible(page: Page) {

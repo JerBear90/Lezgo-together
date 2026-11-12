@@ -118,6 +118,10 @@ body {
   inset: 0;
   z-index: 40;
   display: flex;
+  box-sizing: border-box;
+  height: 100dvh;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
   background: var(--color-stage);
   color: var(--color-ink);
 }
@@ -253,7 +257,7 @@ body {
 .stage-view {
   position: relative;
   flex: 1 1 auto;
-  min-height: 180px;
+  min-height: 0;
   margin: 8px 12px 4px;
 }
 
@@ -319,7 +323,7 @@ body {
   position: relative;
   z-index: 30;
   flex: none;
-  margin: 8px 12px 12px;
+  margin: 8px 12px 8px;
 }
 
 .stage-chips {
