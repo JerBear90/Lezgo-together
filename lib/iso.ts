@@ -1,5 +1,6 @@
 import { footprint, plateLayers } from "./catalog";
 import { ghostAnchor, type BrickInstance, type BuildScene } from "./build-model";
+import { brickPaint } from "./parts";
 
 export type DisplayBrick = BrickInstance & {
   displayX: number;
@@ -82,9 +83,10 @@ export function layoutScene(scene: BuildScene): { faces: DrawnFace[]; markers: S
     const top = item.points.slice(0, 4).map(map);
     const left = item.points.slice(4, 8).map(map);
     const right = item.points.slice(8, 12).map(map);
-    const fill = item.brick.confident ? item.fill : "#d9cbb6";
-    const opacity = item.brick.confident ? (item.brick.isNew ? 1 : 0.45) : 1;
-    const stroke = item.brick.confident ? (item.brick.isNew ? "#f0c445" : "#241910") : "#8a5a00";
+    const paint = brickPaint(item.brick.color);
+    const fill = item.brick.confident ? paint.fill : "#d9cbb6";
+    const opacity = item.brick.confident ? (item.brick.isNew ? 1 : paint.dark ? 0.82 : 0.45) : 1;
+    const stroke = item.brick.confident ? (item.brick.isNew ? "#c4b5fd" : paint.dark ? paint.edge : "#241910") : "#c4922a";
     const dashed = !item.brick.confident;
     faces.push(face(`${item.brick.key}-left`, left, shade(fill, 0.72), opacity, stroke, dashed));
     faces.push(face(`${item.brick.key}-right`, right, shade(fill, 0.55), opacity, stroke, dashed));
@@ -151,14 +153,7 @@ function face(key: string, points: { x: number; y: number }[], fill: string, opa
 }
 
 function brickFill(color: string): string {
-  const known: Record<string, string> = {
-    red: "#e23b2f",
-    black: "#241910",
-    yellow: "#f0c445",
-    white: "#f7f4ee",
-    blue: "#2f6fdd",
-  };
-  return known[color.trim().toLowerCase()] ?? "#c4b8a8";
+  return brickPaint(color).fill;
 }
 
 function shade(hex: string, amount: number): string {
