@@ -1,14 +1,21 @@
 import { z } from "zod";
+import { unknownPlacement } from "./placement";
 import { clampRegion } from "./region";
 import {
+  PLACEMENT_FIELDS,
   UNCERTAIN_FIELDS,
   type Certainty,
   type CombinePoint,
+  type NormPoint,
   type ParsedExtraction,
   type ParsedSection,
+  type PartPlacement,
   type PartSpec,
+  type PlacementUncertainField,
   type RetakeFlag,
   type StepSpec,
+  type StudOffset,
+  type StudPose,
   type UncertainField,
 } from "./types";
 
@@ -41,6 +48,38 @@ export const partSchema = z.object({
     .string()
     .nullable()
     .describe("What is unclear about this part, or null when the part is certain."),
+  placement: z.object({
+    point: z
+      .object({ x: z.number(), y: z.number() })
+      .nullable()
+      .describe("Where this new part sits inside this step's diagram, fractions from 0 to 1. Null if you cannot see the spot."),
+    callout: z
+      .object({ x: z.number(), y: z.number() })
+      .nullable()
+      .describe("Where that part's printed callout sits in the same diagram, or null."),
+    studs: z.object({
+      along: z.number().nullable().describe("How many studs in from fromEdge. Null when you cannot count them. Never guess."),
+      fromEdge: z.string().nullable().describe('The visible edge the count starts from, such as "left edge", or null.'),
+      row: z.number().nullable().describe("Stud row counting from the front, 1 for the first row. Null when you cannot count."),
+      onto: z.string().nullable().describe('The piece underneath, such as "blue 2x6", or null.'),
+      relation: z.string().nullable().describe('How it meets that piece, such as "on top of", or null.'),
+    }),
+    poses: z
+      .array(
+        z.object({
+          x: z.number().nullable().describe("Stud column from the left of the build. Null if you cannot see it."),
+          y: z.number().nullable().describe("Stud row from the front of the build. Null if you cannot see it."),
+          layer: z.number().nullable().describe("Plate-height layer, 0 at the table. A brick is 3 layers tall. Null if you cannot see it."),
+          rotation: z.number().nullable().describe("0, 90, 180, or 270. Null if the turn is unclear. Do not snap a guess to 0."),
+        }),
+      )
+      .describe("One pose for each physical copy of this part. Use null axes instead of copying a neighbor."),
+    certainty: z.enum(["certain", "uncertain"]).describe("certain only when the spot, stud counts, rotation, and layer are all clear."),
+    uncertainFields: z.array(z.enum(PLACEMENT_FIELDS)).describe("Which of point, studs, orientation, or layer could not be read."),
+    note: z.string().nullable().describe('What is unclear, for example "can\'t count studs, photo angle", or null.'),
+    needsRetake: z.boolean().describe("True when a closer, straighter photo would show the studs or the spot."),
+    corrected: z.boolean().describe("Always false. The app sets this when a person moves the part."),
+  }),
 });
 
 export const extractedStepSchema = z.object({
@@ -119,6 +158,16 @@ Steps
 - placementCertainty is "uncertain" when you cannot tell where the pieces go. Say that in placementNote. Do not invent a side, layer, or direction.
 - region is that step's diagram on the page, as fractions from 0 to 1 (x, y, width, height), or null if you cannot localize it. A missing region is not a reason to invent placement.
 - description is one or two short sentences in plain language. If the instruction cannot be read, say that it could not be read.
+
+Where each new part goes
+- Count studs. along is how many studs in from a visible edge (fromEdge, for example "left edge"). row is the stud row from the front, starting at 1. onto is the piece it sits on, such as "blue 2x6". relation is "on top of" when it stacks.
+- poses has one entry per physical copy: x and y are studs from the left and the front, layer is the plate height (a brick is 3), rotation is 0, 90, 180, or 270.
+- point and callout are fractions from 0 to 1 inside THIS step's diagram, not the whole page. point is the new part. callout is its printed label.
+- Count only studs you can see. If a stud is hidden, the photo is angled, or you are not sure of the count, set that number to null. Do not estimate, and do not use 0 or 1 as a stand-in.
+- certainty is "certain" only when the point, the stud counts, the rotation, and the layer are all clear. Otherwise "uncertain", and list point, studs, orientation, or layer in uncertainFields.
+- note says what is unclear, for example "can't count studs, photo angle".
+- needsRetake is true when a closer, straighter, brighter photo would let you count the studs or see the spot. Leave the numbers null in that case.
+- corrected is always false.
 
 Photo quality
 - If the photo is too blurry, dark, cropped, angled, or low-resolution to read reliably, set retake.needed to true.
@@ -215,6 +264,17 @@ export function mockPageExtraction(pageOrder = 0): unknown {
             certainty: "certain",
             uncertainFields: [],
             uncertaintyNote: null,
+            placement: {
+              point: { x: 0.4, y: 0.55 },
+              callout: { x: 0.78, y: 0.28 },
+              studs: { along: 2, fromEdge: "left edge", row: 1, onto: null, relation: null },
+              poses: [{ x: 2, y: 0, layer: 0, rotation: 0 }],
+              certainty: "certain",
+              uncertainFields: [],
+              note: null,
+              needsRetake: false,
+              corrected: false,
+            },
           },
         ],
       },
@@ -233,6 +293,17 @@ export function mockPageExtraction(pageOrder = 0): unknown {
             certainty: "uncertain",
             uncertainFields: ["color", "quantity"],
             uncertaintyNote: "Demo mode does not guess color or count from the photo.",
+            placement: {
+              point: null,
+              callout: null,
+              studs: { along: null, fromEdge: null, row: null, onto: null, relation: null },
+              poses: [{ x: null, y: null, layer: null, rotation: null }],
+              certainty: "uncertain",
+              uncertainFields: ["point", "studs", "orientation", "layer"],
+              note: "can't count studs, photo angle",
+              needsRetake: true,
+              corrected: false,
+            },
           },
         ],
       },
@@ -388,6 +459,7 @@ function readPart(row: Loose): PartSpec {
       certainty,
       uncertainFields: [],
       uncertaintyNote: null,
+      placement: readPlacement(row),
     };
   }
   return {
@@ -398,7 +470,140 @@ function readPart(row: Loose): PartSpec {
     certainty: "uncertain",
     uncertainFields: fields,
     uncertaintyNote: note,
+    placement: readPlacement(row),
   };
+}
+
+function readPlacement(row: Loose): PartPlacement {
+  const source = row.placement;
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    return unknownPlacement();
+  }
+  const bag = source as Loose;
+  const note = cleanNote(bag.note ?? bag.uncertaintyNote);
+  const studs = readStuds(bag.studs);
+  const poses = readPoses(bag.poses ?? bag.positions);
+  const point = readNormPoint(bag.point);
+  const callout = readNormPoint(bag.callout);
+  let fields = readPlacementFields(bag.uncertainFields);
+  let certainty = resolveCertainty(bag.certainty, note);
+  const needsRetake = bag.needsRetake === true || Boolean(note && QUALITY_BAD.test(note));
+  if (note && /can(?:not|'t)\s+count/i.test(note)) fields = addField(fields, "studs");
+  const located = poses.some((pose) => pose.x != null && pose.y != null && pose.layer != null && pose.rotation != null);
+  if (studs.along == null || studs.row == null) fields = addField(fields, "studs");
+  if (!located) {
+    fields = addField(fields, "point");
+    if (poses.length === 0 || poses.every((pose) => pose.rotation == null)) fields = addField(fields, "orientation");
+    if (poses.length === 0 || poses.every((pose) => pose.layer == null)) fields = addField(fields, "layer");
+  }
+  if (needsRetake || fields.length > 0) certainty = "uncertain";
+  if (certainty === "uncertain" && fields.includes("studs")) {
+    studs.along = null;
+    studs.row = null;
+  }
+  fields = PLACEMENT_FIELDS.filter((field) => fields.includes(field));
+  if (certainty === "certain") {
+    return {
+      point,
+      callout,
+      studs,
+      poses,
+      certainty,
+      uncertainFields: [],
+      note: null,
+      needsRetake: false,
+      corrected: false,
+    };
+  }
+  return {
+    point: fields.includes("point") ? null : point,
+    callout: fields.includes("point") ? null : callout,
+    studs,
+    poses,
+    certainty: "uncertain",
+    uncertainFields: fields,
+    note,
+    needsRetake,
+    corrected: false,
+  };
+}
+
+function readStuds(value: unknown): StudOffset {
+  const bag = value && typeof value === "object" && !Array.isArray(value) ? (value as Loose) : {};
+  return {
+    along: readStudNumber(bag.along ?? bag.x),
+    fromEdge: cleanShort(bag.fromEdge ?? bag.from ?? bag.reference),
+    row: readStudNumber(bag.row ?? bag.y),
+    onto: cleanShort(bag.onto),
+    relation: cleanShort(bag.relation),
+  };
+}
+
+function readPoses(value: unknown): StudPose[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 24).flatMap((item) => {
+    const pose = readPose(item);
+    return pose ? [pose] : [];
+  });
+}
+
+function readPose(value: unknown): StudPose | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const bag = value as Loose;
+  return {
+    x: readStudNumber(bag.x),
+    y: readStudNumber(bag.y),
+    layer: readStudNumber(bag.layer),
+    rotation: readRotation(bag.rotation),
+  };
+}
+
+function readRotation(value: unknown): number | null {
+  const number = readStudNumber(value);
+  if (number == null) return null;
+  const wrapped = ((number % 360) + 360) % 360;
+  if (wrapped % 90 !== 0) return null;
+  return wrapped;
+}
+
+function readNormPoint(value: unknown): NormPoint | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const bag = value as Loose;
+  let x = numberOrNaN(bag.x);
+  let y = numberOrNaN(bag.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  if (Math.max(Math.abs(x), Math.abs(y)) > 1.5) {
+    x /= 100;
+    y /= 100;
+  }
+  if (x < 0 || y < 0 || x > 1 || y > 1) return null;
+  return { x, y };
+}
+
+function readStudNumber(value: unknown): number | null {
+  if (typeof value === "string" && (!value.trim() || UNCLEAR_TEXT.test(value.trim()))) return null;
+  if (value == null) return null;
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  const rounded = Math.round(numeric);
+  if (Math.abs(rounded) > 80) return null;
+  return rounded;
+}
+
+function readPlacementFields(value: unknown): PlacementUncertainField[] {
+  if (!Array.isArray(value)) return [];
+  const allowed = new Set<string>(PLACEMENT_FIELDS);
+  return value.filter((field): field is PlacementUncertainField => typeof field === "string" && allowed.has(field));
+}
+
+function addField(fields: PlacementUncertainField[], field: PlacementUncertainField): PlacementUncertainField[] {
+  return fields.includes(field) ? fields : [...fields, field];
+}
+
+function cleanShort(value: unknown): string | null {
+  const text = readString(value);
+  if (!text || UNCLEAR_TEXT.test(text)) return null;
+  return text.slice(0, 80);
 }
 
 function readRetake(raw: Loose): RetakeFlag {

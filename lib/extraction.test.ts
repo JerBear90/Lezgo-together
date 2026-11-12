@@ -8,6 +8,19 @@ import {
   parseExtraction,
 } from "./extraction";
 import { attentionCounts, canMarkPartCertain, retakeMessage, uncertaintyLabel } from "./labels";
+import { canDrawArrow, formatStudPlacement } from "./placement";
+
+const certainPlacement = {
+  point: { x: 0.4, y: 0.5 },
+  callout: { x: 0.8, y: 0.2 },
+  studs: { along: 3, fromEdge: "left edge", row: 2, onto: "blue 2x6", relation: "on top of" },
+  poses: [{ x: 3, y: 1, layer: 3, rotation: 0 }],
+  certainty: "certain" as const,
+  uncertainFields: [] as const,
+  note: null,
+  needsRetake: false,
+  corrected: false,
+};
 
 const certainPart = {
   color: "Red",
@@ -17,6 +30,7 @@ const certainPart = {
   certainty: "certain",
   uncertainFields: [],
   uncertaintyNote: null,
+  placement: certainPlacement,
 };
 
 describe("extraction schema", () => {
@@ -40,6 +54,17 @@ describe("extraction schema", () => {
               certainty: "uncertain",
               uncertainFields: ["color", "quantity"],
               uncertaintyNote: "Color and count are not readable.",
+              placement: {
+                point: null,
+                callout: null,
+                studs: { along: null, fromEdge: null, row: null, onto: null, relation: null },
+                poses: [{ x: null, y: null, layer: null, rotation: null }],
+                certainty: "uncertain",
+                uncertainFields: ["point", "studs"],
+                note: "can't count studs, photo angle",
+                needsRetake: true,
+                corrected: false,
+              },
             },
           ],
         },
@@ -226,6 +251,8 @@ describe("parseExtraction", () => {
     expect(EXTRACTION_INSTRUCTIONS).toMatch(/retake\.needed/);
     expect(EXTRACTION_INSTRUCTIONS).toMatch(/Do not guess a split/);
     expect(EXTRACTION_INSTRUCTIONS).toMatch(/Do not invent a joining step/);
+    expect(EXTRACTION_INSTRUCTIONS).toMatch(/Count studs/);
+    expect(EXTRACTION_INSTRUCTIONS).toMatch(/Do not estimate/);
   });
 
   it("keeps an unclear sub-build boundary unsure instead of inventing one", () => {
@@ -269,6 +296,63 @@ describe("parseExtraction", () => {
     expect(parsed.sections.map((section) => section.name)).toEqual(["Hull"]);
     expect(parsed.combine.certainty).toBe("uncertain");
     expect(parsed.combine.description).toMatch(/Maybe/);
+  });
+
+  it("drops a stud count the model was not sure of and does not draw an arrow", () => {
+    const parsed = parseExtraction({
+      retake: { needed: false, reasons: [] },
+      steps: [
+        {
+          stepNumber: 1,
+          description: "A red brick goes somewhere on the hull.",
+          placementCertainty: "certain",
+          placementNote: null,
+          region: { x: 0.1, y: 0.1, width: 0.8, height: 0.4 },
+          parts: [
+            {
+              ...certainPart,
+              placement: {
+                point: { x: 0.5, y: 0.5 },
+                callout: { x: 0.2, y: 0.2 },
+                studs: { along: 3, fromEdge: "left edge", row: 2, onto: "blue 2x6", relation: "on top of" },
+                poses: [{ x: 3, y: 1, layer: 3, rotation: 0 }],
+                certainty: "uncertain",
+                uncertainFields: ["studs"],
+                note: "can't count studs, photo angle",
+                needsRetake: true,
+                corrected: false,
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const part = parsed.steps[0]?.parts[0];
+    expect(part?.placement.studs.along).toBeNull();
+    expect(part?.placement.studs.row).toBeNull();
+    expect(part?.placement.needsRetake).toBe(true);
+    expect(part?.placement.certainty).toBe("uncertain");
+    expect(canDrawArrow(part!)).toBe(false);
+    expect(formatStudPlacement(part!)).toBeNull();
+  });
+
+  it("keeps a counted stud offset when the reading is certain", () => {
+    const parsed = parseExtraction({
+      retake: { needed: false, reasons: [] },
+      steps: [
+        {
+          stepNumber: 1,
+          description: "The red brick sits on the blue plate.",
+          parts: [certainPart],
+        },
+      ],
+    });
+    const part = parsed.steps[0]?.parts[0];
+    expect(part?.placement.poses[0]).toMatchObject({ x: 3, y: 1, layer: 3, rotation: 0 });
+    expect(formatStudPlacement(part!)).toBe(
+      "Red 2x4: place 3 studs in from the left edge, 2nd row from the front, on top of the blue 2x6.",
+    );
+    expect(canDrawArrow(part!)).toBe(true);
   });
 });
 

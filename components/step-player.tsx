@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { lookupPart } from "@/lib/catalog";
+import { updatePartPlacement } from "@/lib/editing";
 import { placementLabel, retakeMessage, uncertaintyLabel } from "@/lib/labels";
+import { canDrawPhotoArrow, formatStudPlacement, nudgeStud, placementUncertaintyLabel, shiftPose } from "@/lib/placement";
 import { quantityLabel } from "@/lib/parts";
 import {
   allPartsChecked,
@@ -21,12 +24,16 @@ import { BenchLoading, ColorDot, ProgressBar, UnsureBadge } from "./ui";
 import { RoomSync } from "./room-sync";
 import { usePlayers } from "./use-players";
 import { useBrickSet } from "./use-set";
+import { StepDiagram } from "./step-diagram";
 import { StepImage } from "./step-view";
+import type { Part } from "@/lib/types";
 
 export function StepPlayer({ id }: { id: string }) {
   const { set, loading, missing, commit, snapshot } = useBrickSet(id);
   const { active } = usePlayers();
   const [jumpOpen, setJumpOpen] = useState(false);
+  const [view, setView] = useState<"diagram" | "photo">("diagram");
+  const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
   const drag = useRef<{ x: number; y: number; pointerId: number } | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const sheetRef = useRef<HTMLElement>(null);
@@ -104,7 +111,32 @@ export function StepPlayer({ id }: { id: string }) {
   const checked = checkedIds(progress, step.id);
   const place = placementLabel(step);
   const retake = page ? retakeMessage(page.retake) : null;
+  const placementRetake = step.parts.some((part) => part.placement.needsRetake);
   const fraction = progressFraction(steps, step.id);
+
+  function currentStep(current: NonNullable<ReturnType<typeof snapshot>>) {
+    if (!active) return undefined;
+    const ordered = playableSteps(current, active.id);
+    return ordered[stepIndex(ordered, progressFor(current, active.id).currentStepId)];
+  }
+
+  function shift(partId: string, poseIndex: number, axis: "x" | "y", delta: number) {
+    const current = snapshot();
+    if (!current) return;
+    const playing = currentStep(current);
+    const part = playing?.parts.find((item) => item.id === partId);
+    if (!playing || !part) return;
+    commit(updatePartPlacement(current, playing.id, partId, shiftPose(part.placement, poseIndex, axis, delta)));
+  }
+
+  function nudge(partId: string, axis: "along" | "row", delta: number) {
+    const current = snapshot();
+    if (!current) return;
+    const playing = currentStep(current);
+    const part = playing?.parts.find((item) => item.id === partId);
+    if (!playing || !part) return;
+    commit(updatePartPlacement(current, playing.id, partId, nudgeStud(part.placement, axis, delta)));
+  }
 
   function move(direction: "next" | "back") {
     const current = snapshot();
@@ -126,6 +158,15 @@ export function StepPlayer({ id }: { id: string }) {
         <p className="text-sm text-muted">
           {index + 1}/{steps.length}
         </p>
+        {view === "diagram" ? (
+          <button type="button" data-testid="show-photo" className="min-h-11 rounded-full border border-line bg-card px-3 text-sm font-semibold" onClick={() => setView("photo")}>
+            Photo
+          </button>
+        ) : (
+          <button type="button" data-testid="show-diagram" className="min-h-11 rounded-full border border-line bg-card px-3 text-sm font-semibold" onClick={() => setView("diagram")}>
+            Diagram
+          </button>
+        )}
       </header>
       <div className="px-4">
         <ProgressBar value={fraction * steps.length} max={steps.length} label="Build progress" />
@@ -155,31 +196,16 @@ export function StepPlayer({ id }: { id: string }) {
           writeProgress({ ...mine, imageScrollTop: imageRef.current.scrollTop });
         }}
       >
-        <div style={{ transform: `scale(${progress.zoom})`, transformOrigin: "top center" }}>
-          {page ? <StepImage src={page.imageDataUrl} region={step.region} alt={step.description} /> : null}
-          {isCombineStep(step) && set.coverDataUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={set.coverDataUrl} alt="" className="mx-auto max-h-64 object-contain" />
-          ) : null}
-        </div>
-        <div className="absolute bottom-2 right-2 flex gap-1">
-          <button
-            type="button"
-            data-testid="zoom-out"
-            className="h-9 w-9 rounded-full bg-card font-semibold"
-            onClick={() => writeProgress({ ...progress, zoom: Math.max(1, progress.zoom - 0.5) })}
-          >
-            −
-          </button>
-          <button
-            type="button"
-            data-testid="zoom-in"
-            className="h-9 w-9 rounded-full bg-card font-semibold"
-            onClick={() => writeProgress({ ...progress, zoom: Math.min(2.5, progress.zoom + 0.5) })}
-          >
-            +
-          </button>
-        </div>
+        {view === "diagram" ? (
+          <StepDiagram steps={steps} stepId={step.id} onShift={shift} onSelect={setSelectedPartId} />
+        ) : page ? (
+          <StepImage src={page.imageDataUrl} region={step.region} alt={step.description}>
+            <PhotoArrows parts={step.parts} />
+          </StepImage>
+        ) : isCombineStep(step) && set.coverDataUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={set.coverDataUrl} alt="" className="mx-auto max-h-64 object-contain" />
+        ) : null}
       </div>
       <section
         ref={sheetRef}
@@ -199,6 +225,48 @@ export function StepPlayer({ id }: { id: string }) {
             </Link>
           </p>
         ) : null}
+        {placementRetake && !retake ? (
+          <p data-testid="placement-retake" className="rounded-2xl bg-[#fff1ec] px-3 py-2 text-sm text-brick-dark">
+            Retake this photo. A straighter, closer shot would show the studs.{" "}
+            <Link href={`/sets/${id}/pages`} className="font-semibold underline">
+              Open pages
+            </Link>
+          </p>
+        ) : null}
+        <ul className="space-y-2">
+          {step.parts.map((part) => {
+            const studs = formatStudPlacement(part);
+            const unsure = placementUncertaintyLabel(part);
+            const catalog = lookupPart(part.shape, part.size);
+            const identified = catalog && part.certainty === "certain" && part.placement.certainty === "certain";
+            return (
+              <li key={part.id}>
+                {studs ? (
+                  <p data-testid="stud-text" className="text-sm">
+                    {studs}
+                  </p>
+                ) : null}
+                {identified ? (
+                  <p data-testid="part-id" className="text-xs text-muted">
+                    {catalog.id} · {catalog.name}
+                  </p>
+                ) : null}
+                {unsure ? (
+                  <p className="flex flex-wrap items-center gap-2 text-sm text-unsure">
+                    <UnsureBadge label={unsure} />
+                    <span>{unsure}</span>
+                  </p>
+                ) : null}
+                {selectedPartId === part.id ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Nudge label="Studs" testId="stud-along" onChange={(delta) => nudge(part.id, "along", delta)} />
+                    <Nudge label="Row" testId="stud-row" onChange={(delta) => nudge(part.id, "row", delta)} />
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
         {place ? (
           <p className="flex flex-wrap items-center gap-2 text-sm text-unsure">
             <UnsureBadge label={place} />
@@ -302,5 +370,39 @@ export function StepPlayer({ id }: { id: string }) {
         ) : null}
       </section>
     </div>
+  );
+}
+
+function PhotoArrows({ parts }: { parts: Part[] }) {
+  const marks = parts.filter((part) => canDrawPhotoArrow(part) && part.placement.point && part.placement.callout);
+  if (marks.length === 0) return null;
+  return (
+    <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+      {marks.map((part) => {
+        const from = part.placement.callout;
+        const to = part.placement.point;
+        if (!from || !to) return null;
+        return (
+          <g key={part.id} data-testid="photo-arrow">
+            <line x1={from.x * 100} y1={from.y * 100} x2={to.x * 100} y2={to.y * 100} stroke="#e23d2b" strokeWidth="3" vectorEffect="non-scaling-stroke" />
+            <circle cx={to.x * 100} cy={to.y * 100} r="2.2" fill="none" stroke="#f0c445" strokeWidth="3" vectorEffect="non-scaling-stroke" />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function Nudge({ label, testId, onChange }: { label: string; testId: string; onChange: (delta: number) => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-line bg-card px-2 py-1 text-xs font-semibold">
+      {label}
+      <button type="button" data-testid={`${testId}-dec`} className="h-8 w-8 rounded-full bg-paper" onClick={() => onChange(-1)} aria-label={`Decrease ${label}`}>
+        −
+      </button>
+      <button type="button" data-testid={`${testId}-inc`} className="h-8 w-8 rounded-full bg-paper" onClick={() => onChange(1)} aria-label={`Increase ${label}`}>
+        +
+      </button>
+    </span>
   );
 }

@@ -1,4 +1,5 @@
 import { canMarkPartCertain } from "./labels";
+import { unknownPlacement } from "./placement";
 import { normalizeProgress, reconcileProgress } from "./player";
 import { splitRegion, unionRegion } from "./region";
 import { attachPageSections, defaultCombine } from "./sections";
@@ -9,6 +10,7 @@ import type {
   InstructionPage,
   Part,
   ParsedExtraction,
+  PartPlacement,
   PartSpec,
   SetProgress,
 } from "./types";
@@ -280,6 +282,15 @@ export function setPlacement(set: BrickSet, stepId: string, certainty: Certainty
   };
 }
 
+export function updatePartPlacement(
+  set: BrickSet,
+  stepId: string,
+  partId: string,
+  placement: PartPlacement,
+): BrickSet {
+  return mapPart(set, stepId, partId, (part) => ({ ...part, placement }));
+}
+
 export function updatePart(set: BrickSet, stepId: string, partId: string, patch: Partial<PartSpec>): BrickSet {
   return mapPart(set, stepId, partId, (part) => ({ ...part, ...patch }));
 }
@@ -309,6 +320,7 @@ export function addPart(set: BrickSet, stepId: string, partId: string): BrickSet
     certainty: "uncertain",
     uncertainFields: ["color", "shape", "size", "quantity"],
     uncertaintyNote: "Fill in this piece. Nothing was guessed.",
+    placement: unknownPlacement("This piece has no stud position yet."),
   };
   return {
     ...set,

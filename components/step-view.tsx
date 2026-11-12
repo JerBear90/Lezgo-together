@@ -1,32 +1,43 @@
 "use client";
 
+import { useState, type ReactNode } from "react";
 import type { BuildStep } from "@/lib/types";
 
 export function StepImage({
   src,
   region,
   alt,
+  children,
 }: {
   src: string;
   region: BuildStep["region"];
   alt: string;
+  children?: ReactNode;
 }) {
+  const [ratio, setRatio] = useState(2.2);
   if (!region) {
     return (
       <div data-testid="step-image" className="flex h-full items-center justify-center bg-[#efe6d6]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={src} alt={alt} className="max-h-full max-w-full object-contain" />
+        {children}
       </div>
     );
   }
   return (
-    <div data-testid="step-image" className="relative h-full overflow-hidden bg-[#efe6d6]">
+    <div data-testid="step-image" className="relative w-full overflow-hidden bg-[#efe6d6]" style={{ aspectRatio: ratio }}>
       {/* Local booklet photos are data URLs positioned by the step region. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={src}
         alt={alt}
         className="absolute max-w-none"
+        onLoad={(event) => {
+          const image = event.currentTarget;
+          if (image.naturalWidth > 0 && image.naturalHeight > 0) {
+            setRatio((region.width * image.naturalWidth) / (region.height * image.naturalHeight));
+          }
+        }}
         style={{
           width: `${100 / region.width}%`,
           height: `${100 / region.height}%`,
@@ -34,6 +45,7 @@ export function StepImage({
           top: `${(-region.y / region.height) * 100}%`,
         }}
       />
+      {children}
     </div>
   );
 }

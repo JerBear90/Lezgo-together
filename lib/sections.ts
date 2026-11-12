@@ -49,7 +49,8 @@ export function playableSteps(set: BrickSet, playerId: string | null): BuildStep
     const ids = new Set(
       sections.filter((section) => section.assigneeId === playerId).flatMap((section) => section.stepIds),
     );
-    mine = ordered.filter((step) => ids.has(step.id));
+    const filtered = ordered.filter((step) => ids.has(step.id));
+    if (filtered.length > 0) mine = filtered;
   }
   if (sections.length >= 2) return [...mine, combineAsStep(set)];
   return mine;
