@@ -128,6 +128,19 @@ test("keeps a dragged arrow after reload", async ({ page }) => {
   await expect(page.locator("[data-testid='placement-target'][data-pose='0']")).toHaveAttribute("data-x", after ?? "");
 });
 
+test("opens the harbor tug sample from a direct link", async ({ page }) => {
+  await page.goto("/sets/demo-harbor-tug");
+  await expect(page.getByRole("heading", { name: "Harbor Tug 214" })).toBeVisible();
+  await expect(page.getByText("Missing set")).toHaveCount(0);
+  await expect(page.getByText("That set is not on this device")).toHaveCount(0);
+  await expect(page.getByTestId("nav-play")).toBeVisible();
+
+  await page.goto("/sets/not-a-real-set");
+  await expect(page.getByRole("heading", { name: "Missing set" })).toBeVisible();
+  await expect(page.getByTestId("try-sample")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Home" })).toBeVisible();
+});
+
 test("shows the whole-set parts list", async ({ page }, testInfo) => {
   await createSet(page);
   await uploadPages(page);

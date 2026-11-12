@@ -5,20 +5,14 @@ import { orderedSteps } from "@/lib/editing";
 import { uncertaintyLabel } from "@/lib/labels";
 import { quantityLabel, rollupParts } from "@/lib/parts";
 import { sectionSpans } from "@/lib/sections";
+import { MissingSet } from "./missing-set";
 import { BenchLoading, ColorDot, TopBar, UnsureBadge } from "./ui";
 import { useBrickSet } from "./use-set";
 
 export function PartsView({ id }: { id: string }) {
   const { set, loading, missing } = useBrickSet(id);
   if (loading) return <BenchLoading label="Counting pieces" />;
-  if (missing || !set) {
-    return (
-      <>
-        <TopBar title="Parts" backHref="/" backLabel="Sets" />
-        <p className="px-4 py-8">That set is not on this device.</p>
-      </>
-    );
-  }
+  if (missing || !set) return <MissingSet />;
   const steps = orderedSteps(set.pages, set.steps);
   const parts = rollupParts(steps);
   return (

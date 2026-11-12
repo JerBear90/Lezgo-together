@@ -4,20 +4,14 @@ import { orderedSteps, addBlankStep, addPart, deleteStep, markPartClear, markPar
 import { canMarkPartCertain, placementLabel, uncertaintyLabel } from "@/lib/labels";
 import { createId } from "@/lib/ids";
 import type { BrickSet, BuildStep, Part } from "@/lib/types";
+import { MissingSet } from "./missing-set";
 import { BenchLoading, TopBar, UnsureBadge } from "./ui";
 import { useBrickSet } from "./use-set";
 
 export function StepEditor({ id }: { id: string }) {
   const { set, loading, missing, commit, snapshot } = useBrickSet(id);
   if (loading) return <BenchLoading label="Opening steps" />;
-  if (missing || !set) {
-    return (
-      <>
-        <TopBar title="Steps" backHref="/" backLabel="Sets" />
-        <p className="px-4 py-8">That set is not on this device.</p>
-      </>
-    );
-  }
+  if (missing || !set) return <MissingSet />;
   const steps = orderedSteps(set.pages, set.steps);
   const pages = [...set.pages].sort((a, b) => a.order - b.order);
 

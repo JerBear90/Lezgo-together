@@ -17,6 +17,7 @@ import {
   togglePart,
 } from "@/lib/player";
 import { playableSteps, progressFor, savePlayerProgress, sectionAt, sectionSpans } from "@/lib/sections";
+import { MissingSet } from "./missing-set";
 import { BenchLoading, UnsureBadge } from "./ui";
 import { RoomSync } from "./room-sync";
 import { usePlayers } from "./use-players";
@@ -79,13 +80,7 @@ export function StepPlayer({ id }: { id: string }) {
 
   if (loading || !active) return <BenchLoading label="Opening the build" />;
   const player = active;
-  if (missing || !set) {
-    return (
-      <p className="px-4 py-8">
-        That set is not on this device. <Link href="/">Back to sets</Link>
-      </p>
-    );
-  }
+  if (missing || !set) return <MissingSet />;
   if (!progress || !step || !shownStep) {
     return (
       <main className="px-4 py-10 text-center">

@@ -4,7 +4,8 @@ import { orderedSteps } from "@/lib/editing";
 import { uncertaintyLabel } from "@/lib/labels";
 import { playerStatusLabel } from "@/lib/player";
 import { assignSection, playableSteps, progressFor, splitOffSection } from "@/lib/sections";
-import { BenchLoading, TopBar, UnsureBadge } from "./ui";
+import { MissingSet } from "./missing-set";
+import { BenchLoading, UnsureBadge } from "./ui";
 import { usePlayers } from "./use-players";
 import { useBrickSet } from "./use-set";
 import { RoomSync } from "./room-sync";
@@ -66,15 +67,8 @@ export function TogetherView({ id }: { id: string }) {
     commit(next);
   }, [set, roster, commit]);
 
-  if (loading) return <BenchLoading label="Opening the room" />;
-  if (missing || !set || !active) {
-    return (
-      <>
-        <TopBar title="Together" backHref="/" backLabel="Sets" />
-        <p className="px-4 py-8">That set is not on this device yet.</p>
-      </>
-    );
-  }
+  if (loading || !active) return <BenchLoading label="Opening the room" />;
+  if (missing || !set) return <MissingSet />;
 
   const steps = orderedSteps(set.pages, set.steps);
   const mineIndex = set.sections.findIndex((section) => section.assigneeId === active.id);

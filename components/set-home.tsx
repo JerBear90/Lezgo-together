@@ -11,6 +11,7 @@ import { buildScene } from "@/lib/build-model";
 import { layoutScene } from "@/lib/iso";
 import { emptyProgress, progressFraction, resumeLabel, stepIndex } from "@/lib/player";
 import { playableSteps, progressFor, savePlayerProgress, sectionSpans } from "@/lib/sections";
+import { MissingSet } from "./missing-set";
 import { BenchLoading, ProgressBar, TopBar } from "./ui";
 import { RoomSync } from "./room-sync";
 import { ShareRoom } from "./share-room";
@@ -25,14 +26,7 @@ export function SetHome({ id }: { id: string }) {
   const [confirming, setConfirming] = useState(false);
 
   if (loading || !active) return <BenchLoading label="Opening set" />;
-  if (missing || !set) {
-    return (
-      <>
-        <TopBar title="Missing set" backHref="/" backLabel="Sets" />
-        <p className="px-4 py-8">That set is not on this device.</p>
-      </>
-    );
-  }
+  if (missing || !set) return <MissingSet />;
 
   const steps = orderedSteps(set.pages, set.steps);
   const mine = playableSteps(set, active.id);
