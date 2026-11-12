@@ -76,7 +76,8 @@ export function StepDiagram({
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.target.copy(aim);
         controls.enableDamping = true;
-        controls.enablePan = false;
+        controls.enablePan = true;
+        controls.screenSpacePanning = true;
         controlsRef.current = controls;
 
         world.add(new THREE.AmbientLight(0xffffff, 0.85));
@@ -121,7 +122,7 @@ export function StepDiagram({
           if (brick.confident && brick.isNew) {
             const edges = new THREE.LineSegments(
               new THREE.EdgesGeometry(new THREE.BoxGeometry(w * 1.04, height * 1.05, d * 1.04)),
-              new THREE.LineBasicMaterial({ color: 0xf0c445 }),
+              new THREE.LineBasicMaterial({ color: 0xc4b5fd }),
             );
             edges.position.copy(body.position);
             world.add(edges);
@@ -173,6 +174,16 @@ export function StepDiagram({
 
         placeCamera();
         resize();
+        let lastTap = 0;
+        const onDoubleTap = () => {
+          const now = performance.now();
+          if (now - lastTap < 280) {
+            viewScale.current = 1;
+            placeCamera();
+          }
+          lastTap = now;
+        };
+        renderer.domElement.addEventListener("pointerup", onDoubleTap);
         const observer = new ResizeObserver(() => {
           resize();
           projectMarkers();
@@ -199,6 +210,7 @@ export function StepDiagram({
 
         cleanup = () => {
           window.cancelAnimationFrame(frame);
+          renderer.domElement.removeEventListener("pointerup", onDoubleTap);
           observer.disconnect();
           zoomRef.current = () => {};
           resetRef.current = () => {};
@@ -333,7 +345,7 @@ export function StepDiagram({
         </div>
       ))}
       <p className="pointer-events-none absolute left-3 top-3 z-20 text-xs font-semibold text-muted">Drag to turn · pinch to zoom</p>
-      <div className="absolute bottom-3 left-3 z-20 flex gap-2">
+      <div className="absolute top-8 left-2 z-20 flex gap-1">
         <button type="button" data-zoom="out" aria-label="Zoom out" className="h-11 w-11 rounded-full bg-card text-lg font-semibold shadow" onClick={() => zoomRef.current(-1)}>
           −
         </button>

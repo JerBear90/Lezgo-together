@@ -171,3 +171,35 @@ function orderSteps(pages: Pick<InstructionPage, "id" | "order">[], steps: Build
     return a.stepNumber - b.stepNumber;
   });
 }
+
+export type SectionSpan = {
+  id: string;
+  name: string;
+  from: number;
+  to: number;
+};
+
+/** Groups the visible steps into bags for the stage chips. */
+export function sectionSpans(steps: { id: string }[]): SectionSpan[] {
+  if (steps.length === 0) return [];
+  const sample = steps.every((step) => step.id.startsWith("demo-step-"));
+  if (sample) {
+    const groups = [
+      { id: "hull", name: "Hull", ids: ["demo-step-1", "demo-step-2", "demo-step-3"] },
+      { id: "cabin", name: "Cabin", ids: ["demo-step-4", "demo-step-5", "demo-step-6"] },
+      { id: "finish", name: "Details", ids: ["demo-step-7", "demo-step-8"] },
+    ];
+    return groups.flatMap((group) => {
+      const indexes = group.ids
+        .map((id) => steps.findIndex((step) => step.id === id))
+        .filter((index) => index >= 0);
+      if (indexes.length === 0) return [];
+      return [{ id: group.id, name: group.name, from: Math.min(...indexes), to: Math.max(...indexes) }];
+    });
+  }
+  return [{ id: "build", name: "Build", from: 0, to: steps.length - 1 }];
+}
+
+export function sectionAt(sections: SectionSpan[], index: number): SectionSpan | null {
+  return sections.find((section) => index >= section.from && index <= section.to) ?? null;
+}

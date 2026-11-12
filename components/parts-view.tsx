@@ -4,6 +4,7 @@ import Link from "next/link";
 import { orderedSteps } from "@/lib/editing";
 import { uncertaintyLabel } from "@/lib/labels";
 import { quantityLabel, rollupParts } from "@/lib/parts";
+import { sectionSpans } from "@/lib/sections";
 import { BenchLoading, ColorDot, TopBar, UnsureBadge } from "./ui";
 import { useBrickSet } from "./use-set";
 
@@ -37,8 +38,12 @@ export function PartsView({ id }: { id: string }) {
         {parts.length === 0 ? (
           <p className="mt-6 text-sm">No pieces yet. Read a page or add a step.</p>
         ) : (
-          <ul data-testid="parts-list" className="mt-4 space-y-2">
-            {parts.map((part) => {
+          <ul data-testid="parts-list" className="mt-4 space-y-4">
+            {sectionSpans(steps).map((section) => (
+              <li key={section.id}>
+                <h2 className="text-sm font-extrabold uppercase text-muted">{section.name}</h2>
+                <ul className="mt-2 space-y-2">
+                  {rollupParts(steps.slice(section.from, section.to + 1)).map((part) => {
               const label =
                 part.certainty === "uncertain"
                   ? uncertaintyLabel({
@@ -60,8 +65,11 @@ export function PartsView({ id }: { id: string }) {
                   {label ? <p className="mt-1 text-sm text-unsure">{label}</p> : null}
                   <p className="mt-1 text-xs text-muted">Steps {part.stepNumbers.join(", ")}</p>
                 </li>
-              );
-            })}
+                  );
+                })}
+                </ul>
+              </li>
+            ))}
           </ul>
         )}
       </main>
