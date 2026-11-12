@@ -291,20 +291,22 @@ export function StepPlayer({ id }: { id: string }) {
             </p>
           ) : null}
         </div>
-        <button type="button" data-testid="step-back" className="btn-lip stage-back" disabled={index === 0} onClick={() => move("back")}>
-          Back
-        </button>
-        {index === steps.length - 1 ? (
-          <Link href={`/sets/${id}`} data-testid="step-next" className="btn-lip stage-next">
-            Next
-          </Link>
-        ) : (
-          <button type="button" data-testid="step-next" className="btn-lip stage-next" onClick={() => move("next")}>
-            Next
+        <div className="stage-actions">
+          <button type="button" data-testid="step-back" className="btn-lip stage-back" disabled={index === 0} onClick={() => move("back")}>
+            Back
           </button>
-        )}
+          {index === steps.length - 1 ? (
+            <Link href={`/sets/${id}`} data-testid="step-next" className="btn-lip stage-next">
+              Next
+            </Link>
+          ) : (
+            <button type="button" data-testid="step-next" className="btn-lip stage-next" onClick={() => move("next")}>
+              Next
+            </button>
+          )}
+        </div>
         <div className="stage-slider">
-          <div className="mb-1 flex gap-1 overflow-x-auto">
+          <div className="stage-chips">
             {sections.map((item) => (
               <button
                 key={item.id}
