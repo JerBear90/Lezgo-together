@@ -31,11 +31,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <div className="desk">
           <div className="phone flex h-dvh flex-col">
             <PlayerBar />
-            <div className="min-h-0 flex-1 overflow-auto">
-              <Suspense fallback={children}>
-                <AppShell>{children}</AppShell>
-              </Suspense>
-            </div>
+            <Suspense fallback={<div className="min-h-0 flex-1 overflow-auto">{children}</div>}>
+              <AppShell>{children}</AppShell>
+            </Suspense>
           </div>
         </div>
       </body>

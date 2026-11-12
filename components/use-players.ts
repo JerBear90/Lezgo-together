@@ -17,17 +17,23 @@ export function usePlayers() {
 
   useEffect(() => {
     let cancel = false;
-    ensurePlayers()
-      .then((result) => {
-        if (cancel) return;
-        setPlayers(result.players);
-        setActive(result.active);
-      })
-      .catch(() => {
-        if (!cancel) setPlayers([]);
-      });
+    const load = () => {
+      ensurePlayers()
+        .then((result) => {
+          if (cancel) return;
+          setPlayers(result.players);
+          setActive(result.active);
+        })
+        .catch(() => {
+          if (!cancel) setPlayers([]);
+        });
+    };
+    load();
+    const onChange = () => load();
+    window.addEventListener("lezgo-players", onChange);
     return () => {
       cancel = true;
+      window.removeEventListener("lezgo-players", onChange);
     };
   }, []);
 
@@ -35,6 +41,7 @@ export function usePlayers() {
     (id: string) => {
       writeActivePlayerId(id);
       setActive(players?.find((player) => player.id === id) ?? null);
+      window.dispatchEvent(new Event("lezgo-players"));
     },
     [players],
   );
@@ -54,6 +61,7 @@ export function usePlayers() {
       const next = await listPlayers();
       setPlayers(next);
       setActive(next.find((item) => item.id === player.id) ?? player);
+      window.dispatchEvent(new Event("lezgo-players"));
       return player;
     },
     [],

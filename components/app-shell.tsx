@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 
 const links = [
   { href: "/", label: "Sets", testId: "nav-sets" },
-  { href: "/together", label: "Build Together", testId: "nav-together" },
+  { href: "/together", label: "Build Together", testId: "nav-build-together" },
   { href: "/me", label: "Me", testId: "nav-me" },
 ];
 
@@ -14,8 +14,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const path = usePathname() ?? "/";
   const building = path.includes("/play");
   return (
-    <>
-      <div className={building ? "" : "pb-28"}>{children}</div>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 overflow-auto">{children}</div>
       {building ? null : (
         <nav className="pill-nav" aria-label="Main">
           {links.map((link) => {
@@ -28,6 +28,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           })}
         </nav>
       )}
-    </>
+    </div>
   );
 }

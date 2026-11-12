@@ -12,11 +12,11 @@ import { ShareRoom } from "./share-room";
 import { createId } from "@/lib/ids";
 import { useEffect, useRef, useState } from "react";
 import { clearMembership, readMembership, writeMembership } from "@/lib/rooms/membership";
-import type { RoomPlayer } from "@/lib/rooms/model";
+import { lobbyMembers, partyHeadline, type RoomPlayer } from "@/lib/rooms/model";
 
 export function TogetherView({ id }: { id: string }) {
   const { set, loading, missing, commit, snapshot } = useBrickSet(id);
-  const { players, active } = usePlayers();
+  const { active } = usePlayers();
   const [roomPlayers, setRoomPlayers] = useState<RoomPlayer[]>([]);
   const [splitName, setSplitName] = useState("Cabin");
   const [splitStep, setSplitStep] = useState("");
@@ -29,7 +29,13 @@ export function TogetherView({ id }: { id: string }) {
     let stop = false;
     async function load() {
       const membership = readMembership();
-      if (!membership || membership.setId !== id) return;
+      if (!membership || membership.setId !== id) {
+        if (!stop) {
+          setRoomPlayers([]);
+          setRoomCode(null);
+        }
+        return;
+      }
       setRoomCode(membership.code);
       const response = await fetch(`/api/rooms/${membership.code}`);
       if (!response.ok || stop) return;
@@ -44,7 +50,7 @@ export function TogetherView({ id }: { id: string }) {
     };
   }, [id]);
 
-  const roster = roomPlayers.length > 0 ? roomPlayers : players.map((player) => ({ ...player, lastSeenAt: 0 }));
+  const roster = lobbyMembers(roomCode, roomPlayers);
 
   useEffect(() => {
     if (queued.current || !set || roster.length < 2) return;
@@ -111,7 +117,7 @@ export function TogetherView({ id }: { id: string }) {
           </button>
         </div>
         <p className="text-sm font-bold uppercase tracking-wide text-white/80">Build Together</p>
-        <h1 className="font-display text-4xl">{roster.length < 2 ? "Waiting for Builders" : "Start party!"}</h1>
+        <h1 className="font-display text-4xl">{partyHeadline(roster.length)}</h1>
         <p data-testid="your-colour">Your colour is {colorName(active.color)}</p>
         <div className="relative mx-auto h-48 w-48">
           {set.coverDataUrl ? (
@@ -133,7 +139,7 @@ export function TogetherView({ id }: { id: string }) {
           ))}
         </div>
         <ShareRoom set={set} player={active} />
-        <section className="rounded-3xl border border-line bg-card p-4">
+        <section className="rounded-3xl border border-line bg-card p-4 text-ink">
           <h2 className="font-display text-2xl">Who is where</h2>
           <ul className="mt-2 space-y-2" data-testid="shared-progress">
             {roster.map((player) => {
@@ -163,7 +169,7 @@ export function TogetherView({ id }: { id: string }) {
                   })
                 : null;
             return (
-              <article key={section.id} data-testid="section-card" className="rounded-3xl border border-line bg-card p-3">
+              <article key={section.id} data-testid="section-card" className="rounded-3xl border border-line bg-card p-3 text-ink">
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="font-semibold">{section.name}</h3>
                   {section.certainty === "uncertain" ? (
@@ -196,7 +202,7 @@ export function TogetherView({ id }: { id: string }) {
             );
           })}
         </section>
-        <section className="rounded-3xl border border-line bg-card p-4">
+        <section className="rounded-3xl border border-line bg-card p-4 text-ink">
           <h2 className="font-display text-2xl">Combine</h2>
           {set.combine.certainty === "uncertain" ? (
             <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-unsure">
@@ -207,7 +213,7 @@ export function TogetherView({ id }: { id: string }) {
           <p className="mt-2 text-sm">{set.combine.description}</p>
         </section>
         <form
-          className="space-y-2 rounded-3xl border border-dashed border-line p-3"
+          className="space-y-2 rounded-3xl border border-dashed border-white/40 bg-white p-3 text-ink"
           onSubmit={(event) => {
             event.preventDefault();
             const current = snapshot();
