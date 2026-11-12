@@ -189,11 +189,11 @@ export function StepPlayer({ id }: { id: string }) {
             {preview != null && preview !== index ? `Preview ${shownStep.stepNumber}` : `Step ${step.stepNumber}`}
           </h1>
           {view === "diagram" ? (
-            <button type="button" data-testid="show-photo" className="btn-lip shrink-0 px-3 text-sm font-extrabold" onClick={() => setView("photo")}>
+            <button type="button" data-testid="show-photo" className="btn-lip stage-nav-btn" onClick={() => setView("photo")}>
               Photo
             </button>
           ) : (
-            <button type="button" data-testid="show-diagram" className="btn-lip shrink-0 px-3 text-sm font-extrabold" onClick={() => setView("diagram")}>
+            <button type="button" data-testid="show-diagram" className="btn-lip stage-nav-btn" onClick={() => setView("diagram")}>
               Diagram
             </button>
           )}
