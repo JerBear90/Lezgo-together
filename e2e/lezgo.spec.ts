@@ -34,15 +34,13 @@ test("steps next and back and checks off parts", async ({ page }, testInfo) => {
   await shot(page, testInfo, "step-player");
 });
 
-test("fits the step model inside the stage at phone pixel ratios", async ({ browser, baseURL }, testInfo) => {
-  testInfo.setTimeout(120_000);
-  testInfo.skip(testInfo.project.name !== "phone", "phone viewport only");
-  const phones = [
-    { width: 360, height: 740 },
-    { width: 390, height: 844 },
-    { width: 430, height: 932 },
-  ];
-  for (const viewport of phones) {
+for (const viewport of [
+  { width: 360, height: 740 },
+  { width: 390, height: 844 },
+  { width: 430, height: 932 },
+]) {
+  test(`fits the step model at ${viewport.width}x${viewport.height}`, async ({ browser, baseURL }, testInfo) => {
+    testInfo.skip(testInfo.project.name !== "phone", "phone viewport only");
     const context = await browser.newContext({
       viewport,
       deviceScaleFactor: 2,
@@ -67,8 +65,8 @@ test("fits the step model inside the stage at phone pixel ratios", async ({ brow
       if (step < 6) await page.getByTestId("step-next").click();
     }
     await context.close();
-  }
-});
+  });
+}
 
 function overlaps(
   a: { left: number; top: number; right: number; bottom: number },
