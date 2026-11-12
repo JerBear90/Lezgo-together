@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pull request
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Merge latest main
+        run: |
+          git config user.name "Lezgo CI"
+          git config user.email "ci@lezgo.local"
+          git fetch origin main
+          git merge origin/main --no-edit
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          AI_GATEWAY_API_KEY: ""
+          VERCEL_OIDC_TOKEN: ""
+
+      - name: Playwright end-to-end tests
+        run: npm run test:e2e
+        env:
+          CI: true
+          AI_GATEWAY_API_KEY: ""
+          VERCEL_OIDC_TOKEN: ""
+
+      - name: Upload Playwright screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshots
+          path: e2e-screenshots/
+          if-no-files-found: ignore
