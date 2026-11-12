@@ -1,15 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Outfit } from "next/font/google";
+import { Suspense } from "react";
+import { Nunito } from "next/font/google";
+import { AppShell } from "@/components/app-shell";
 import "./globals.css";
 
-const outfit = Outfit({
+const nunito = Nunito({
   subsets: ["latin"],
-  variable: "--font-outfit",
-});
-
-const fraunces = Fraunces({
-  subsets: ["latin"],
-  variable: "--font-fraunces",
+  weight: ["600", "700", "800"],
+  variable: "--font-nunito",
 });
 
 export const metadata: Metadata = {
@@ -25,10 +23,14 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${outfit.variable} ${fraunces.variable} h-full antialiased`}>
+    <html lang="en" className={`${nunito.variable} h-full antialiased`}>
       <body>
         <div className="desk">
-          <div className="phone">{children}</div>
+          <div className="phone">
+            <Suspense fallback={children}>
+              <AppShell>{children}</AppShell>
+            </Suspense>
+          </div>
         </div>
       </body>
     </html>

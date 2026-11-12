@@ -7,9 +7,13 @@ import { deleteSet } from "@/lib/db";
 import { buildDemoSet } from "@/lib/demo";
 import { orderedSteps } from "@/lib/editing";
 import { attentionCounts } from "@/lib/labels";
+import { buildScene } from "@/lib/build-model";
+import { layoutScene } from "@/lib/iso";
 import { progressFraction, stepIndex } from "@/lib/player";
+import { sectionSpans } from "@/lib/sections";
 import { BenchLoading, ProgressBar, TopBar } from "./ui";
 import { useBrickSet } from "./use-set";
+import type { BuildStep } from "@/lib/types";
 
 export function SetHome({ id }: { id: string }) {
   const router = useRouter();
@@ -54,6 +58,15 @@ export function SetHome({ id }: { id: string }) {
             {attention.retakes} photo needs a retake
           </p>
         ) : null}
+        <GhostBuild steps={steps} />
+        <ul className="grid grid-cols-3 gap-2">
+          {sectionSpans(steps).map((section) => (
+            <li key={section.id} className="rounded-2xl bg-card px-2 py-3 text-center shadow-sm">
+              <p className="text-xs font-extrabold uppercase text-muted">{section.name}</p>
+              <p className="font-display text-2xl">{section.to - section.from + 1}</p>
+            </li>
+          ))}
+        </ul>
         <div className="grid grid-cols-2 gap-2">
           <Link href={`/sets/${id}/pages`} data-testid="nav-pages" className="rounded-2xl bg-card px-3 py-4 text-center font-semibold shadow-sm">
             Pages
@@ -67,11 +80,14 @@ export function SetHome({ id }: { id: string }) {
           <Link
             href={steps.length > 0 ? `/sets/${id}/play` : `/sets/${id}/pages`}
             data-testid="nav-play"
-            className="rounded-2xl bg-brick px-3 py-4 text-center font-semibold text-white"
+            className="btn-sun px-3 py-4 text-center font-extrabold"
           >
             {set.progress.currentStepId ? "Continue" : "Build"}
           </Link>
         </div>
+        <Link href="/" data-testid="done-build" className="btn-lip inline-flex min-h-12 items-center justify-center font-extrabold">
+          Done
+        </Link>
         {set.sample ? (
           <button
             type="button"
@@ -106,5 +122,21 @@ export function SetHome({ id }: { id: string }) {
         )}
       </main>
     </>
+  );
+}
+
+function GhostBuild({ steps }: { steps: BuildStep[] }) {
+  if (steps.length === 0) return null;
+  const last = steps[steps.length - 1];
+  if (!last) return null;
+  const layout = layoutScene(buildScene(steps, last.id));
+  return (
+    <div data-testid="ghost-model" className="h-44 overflow-hidden rounded-3xl bg-stage">
+      <svg viewBox="0 0 100 100" className="h-full w-full opacity-50" aria-label="Ghost of the finished build">
+        {layout.faces.map((face) => (
+          <polygon key={face.key} points={face.points} fill={face.fill} stroke="#8aa4b5" strokeWidth={0.3} />
+        ))}
+      </svg>
+    </div>
   );
 }
