@@ -120,6 +120,8 @@ body {
   display: flex;
   box-sizing: border-box;
   height: 100dvh;
+  max-height: 100%;
+  overflow: hidden;
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--color-stage);

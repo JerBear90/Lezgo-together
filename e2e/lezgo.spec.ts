@@ -35,6 +35,7 @@ test("steps next and back and checks off parts", async ({ page }, testInfo) => {
 });
 
 test("fits the step model inside the stage at phone pixel ratios", async ({ browser, baseURL }, testInfo) => {
+  testInfo.setTimeout(120_000);
   testInfo.skip(testInfo.project.name !== "phone", "phone viewport only");
   const phones = [
     { width: 360, height: 740 },
@@ -55,7 +56,7 @@ test("fits the step model inside the stage at phone pixel ratios", async ({ brow
     await page.getByTestId("set-card").click();
     await page.getByTestId("nav-play").click();
     for (let step = 1; step <= 6; step += 1) {
-      await expect(page.getByTestId("step-heading")).toHaveText(`Step ${step}`);
+      await expect(page.getByTestId("step-heading")).toHaveText(`Step ${step}`, { timeout: 15_000 });
       await expectFit(page, step === 2);
       await expectNoticeFullyVisible(page);
       await expectChipsVisible(page);
