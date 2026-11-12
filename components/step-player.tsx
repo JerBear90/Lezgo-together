@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { orderedSteps } from "@/lib/editing";
+import { lookupPart } from "@/lib/catalog";
+import { orderedSteps, updatePartPlacement } from "@/lib/editing";
 import { placementLabel, retakeMessage, uncertaintyLabel } from "@/lib/labels";
+import { canDrawPhotoArrow, formatStudPlacement, nudgeStud, placementUncertaintyLabel, shiftPose } from "@/lib/placement";
 import { quantityLabel } from "@/lib/parts";
 import {
   allPartsChecked,
@@ -18,11 +20,15 @@ import {
 } from "@/lib/player";
 import { BenchLoading, ColorDot, ProgressBar, UnsureBadge } from "./ui";
 import { useBrickSet } from "./use-set";
+import { StepDiagram } from "./step-diagram";
 import { StepImage } from "./step-view";
+import type { Part } from "@/lib/types";
 
 export function StepPlayer({ id }: { id: string }) {
   const { set, loading, missing, commit, snapshot } = useBrickSet(id);
   const [jumpOpen, setJumpOpen] = useState(false);
+  const [view, setView] = useState<"diagram" | "photo">("diagram");
+  const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
   const drag = useRef<{ x: number; y: number; pointerId: number } | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const started = useRef(false);
@@ -82,7 +88,28 @@ export function StepPlayer({ id }: { id: string }) {
   const checked = checkedIds(set.progress, step.id);
   const place = placementLabel(step);
   const retake = page ? retakeMessage(page.retake) : null;
+  const placementRetake = step.parts.some((part) => part.placement.needsRetake);
   const fraction = progressFraction(steps, step.id);
+
+  function shift(partId: string, poseIndex: number, axis: "x" | "y", delta: number) {
+    const current = snapshot();
+    if (!current) return;
+    const ordered = orderedSteps(current.pages, current.steps);
+    const active = ordered[stepIndex(ordered, current.progress.currentStepId)];
+    const part = active?.parts.find((item) => item.id === partId);
+    if (!active || !part) return;
+    commit(updatePartPlacement(current, active.id, partId, shiftPose(part.placement, poseIndex, axis, delta)));
+  }
+
+  function nudge(partId: string, axis: "along" | "row", delta: number) {
+    const current = snapshot();
+    if (!current) return;
+    const ordered = orderedSteps(current.pages, current.steps);
+    const active = ordered[stepIndex(ordered, current.progress.currentStepId)];
+    const part = active?.parts.find((item) => item.id === partId);
+    if (!active || !part) return;
+    commit(updatePartPlacement(current, active.id, partId, nudgeStud(part.placement, axis, delta)));
+  }
 
   function move(direction: "next" | "back") {
     const current = snapshot();
@@ -103,6 +130,15 @@ export function StepPlayer({ id }: { id: string }) {
         <p className="text-sm text-muted">
           {index + 1}/{steps.length}
         </p>
+        {view === "diagram" ? (
+          <button type="button" data-testid="show-photo" className="min-h-11 rounded-full border border-line bg-card px-3 text-sm font-semibold" onClick={() => setView("photo")}>
+            Photo
+          </button>
+        ) : (
+          <button type="button" data-testid="show-diagram" className="min-h-11 rounded-full border border-line bg-card px-3 text-sm font-semibold" onClick={() => setView("diagram")}>
+            Diagram
+          </button>
+        )}
       </header>
       <div className="px-4">
         <ProgressBar value={fraction * steps.length} max={steps.length} label="Build progress" />
@@ -126,7 +162,13 @@ export function StepPlayer({ id }: { id: string }) {
           }
         }}
       >
-        {page ? <StepImage src={page.imageDataUrl} region={step.region} alt={step.description} /> : null}
+        {view === "diagram" ? (
+          <StepDiagram steps={steps} stepId={step.id} onShift={shift} onSelect={setSelectedPartId} />
+        ) : page ? (
+          <StepImage src={page.imageDataUrl} region={step.region} alt={step.description}>
+            <PhotoArrows parts={step.parts} />
+          </StepImage>
+        ) : null}
       </div>
       <section className="max-h-[50%] space-y-3 overflow-y-auto px-4 py-3">
         {retake ? (
@@ -137,6 +179,48 @@ export function StepPlayer({ id }: { id: string }) {
             </Link>
           </p>
         ) : null}
+        {placementRetake && !retake ? (
+          <p data-testid="placement-retake" className="rounded-2xl bg-[#fff1ec] px-3 py-2 text-sm text-brick-dark">
+            Retake this photo. A straighter, closer shot would show the studs.{" "}
+            <Link href={`/sets/${id}/pages`} className="font-semibold underline">
+              Open pages
+            </Link>
+          </p>
+        ) : null}
+        <ul className="space-y-2">
+          {step.parts.map((part) => {
+            const studs = formatStudPlacement(part);
+            const unsure = placementUncertaintyLabel(part);
+            const catalog = lookupPart(part.shape, part.size);
+            const identified = catalog && part.certainty === "certain" && part.placement.certainty === "certain";
+            return (
+              <li key={part.id}>
+                {studs ? (
+                  <p data-testid="stud-text" className="text-sm">
+                    {studs}
+                  </p>
+                ) : null}
+                {identified ? (
+                  <p data-testid="part-id" className="text-xs text-muted">
+                    {catalog.id} · {catalog.name}
+                  </p>
+                ) : null}
+                {unsure ? (
+                  <p className="flex flex-wrap items-center gap-2 text-sm text-unsure">
+                    <UnsureBadge label={unsure} />
+                    <span>{unsure}</span>
+                  </p>
+                ) : null}
+                {selectedPartId === part.id ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Nudge label="Studs" testId="stud-along" onChange={(delta) => nudge(part.id, "along", delta)} />
+                    <Nudge label="Row" testId="stud-row" onChange={(delta) => nudge(part.id, "row", delta)} />
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
         {place ? (
           <p className="flex flex-wrap items-center gap-2 text-sm text-unsure">
             <UnsureBadge label={place} />
@@ -243,5 +327,39 @@ export function StepPlayer({ id }: { id: string }) {
         ) : null}
       </section>
     </div>
+  );
+}
+
+function PhotoArrows({ parts }: { parts: Part[] }) {
+  const marks = parts.filter((part) => canDrawPhotoArrow(part) && part.placement.point && part.placement.callout);
+  if (marks.length === 0) return null;
+  return (
+    <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+      {marks.map((part) => {
+        const from = part.placement.callout;
+        const to = part.placement.point;
+        if (!from || !to) return null;
+        return (
+          <g key={part.id} data-testid="photo-arrow">
+            <line x1={from.x * 100} y1={from.y * 100} x2={to.x * 100} y2={to.y * 100} stroke="#e23d2b" strokeWidth="3" vectorEffect="non-scaling-stroke" />
+            <circle cx={to.x * 100} cy={to.y * 100} r="2.2" fill="none" stroke="#f0c445" strokeWidth="3" vectorEffect="non-scaling-stroke" />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function Nudge({ label, testId, onChange }: { label: string; testId: string; onChange: (delta: number) => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-line bg-card px-2 py-1 text-xs font-semibold">
+      {label}
+      <button type="button" data-testid={`${testId}-dec`} className="h-8 w-8 rounded-full bg-paper" onClick={() => onChange(-1)} aria-label={`Decrease ${label}`}>
+        −
+      </button>
+      <button type="button" data-testid={`${testId}-inc`} className="h-8 w-8 rounded-full bg-paper" onClick={() => onChange(1)} aria-label={`Increase ${label}`}>
+        +
+      </button>
+    </span>
   );
 }

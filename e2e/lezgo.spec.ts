@@ -65,6 +65,69 @@ test("shows a retake photo prompt", async ({ page }, testInfo) => {
   await expect(page.getByTestId("page-status").filter({ hasText: "Ready" })).toHaveCount(4, { timeout: 20_000 });
 });
 
+test("shows a reconstructed step with arrows and stud text", async ({ page }, testInfo) => {
+  await page.goto("/");
+  await page.getByTestId("load-sample").click();
+  await page.getByTestId("set-card").click();
+  await page.getByTestId("nav-play").click();
+  await expect(page.getByTestId("step-heading")).toHaveText("Step 1");
+  await expect(page.getByTestId("step-diagram")).toHaveAttribute("data-mode", /3d|flat/);
+  await expect(page.getByTestId("placement-arrow").first()).toBeVisible();
+  await expect(page.getByTestId("stud-text")).toContainText(
+    "Red 2x4: place 3 studs in from the left edge, 2nd row from the front.",
+  );
+  await expect(page.getByTestId("part-id")).toContainText("3001");
+  await shot(page, testInfo, "reconstructed-step");
+});
+
+test("shows an unsure ghost instead of an arrow", async ({ page }, testInfo) => {
+  await page.goto("/");
+  await page.getByTestId("load-sample").click();
+  await page.getByTestId("set-card").click();
+  await page.getByTestId("nav-play").click();
+  for (let step = 0; step < 4; step += 1) await page.getByTestId("step-next").click();
+  await expect(page.getByTestId("step-heading")).toHaveText("Step 5");
+  await expect(page.getByTestId("placement-arrow")).toHaveCount(0);
+  await expect(page.getByTestId("ghost-part")).toBeVisible();
+  await expect(page.getByTestId("ghost-part")).toContainText("can't count studs, photo angle");
+  await expect(page.getByTestId("placement-retake")).toBeVisible();
+  await shot(page, testInfo, "ghost-part");
+});
+
+test("compares the reconstructed step with the booklet photo", async ({ page }, testInfo) => {
+  await page.goto("/");
+  await page.getByTestId("load-sample").click();
+  await page.getByTestId("set-card").click();
+  await page.getByTestId("nav-play").click();
+  await page.getByTestId("show-photo").click();
+  await expect(page.getByTestId("step-image")).toBeVisible();
+  await expect(page.getByTestId("photo-arrow").first()).toBeVisible();
+  await shot(page, testInfo, "photo-compare");
+  await page.getByTestId("show-diagram").click();
+  await expect(page.getByTestId("step-diagram")).toBeVisible();
+});
+
+test("keeps a dragged arrow after reload", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTestId("load-sample").click();
+  await page.getByTestId("set-card").click();
+  await page.getByTestId("nav-play").click();
+  await expect(page.getByTestId("step-diagram")).toHaveAttribute("data-mode", /3d|flat/);
+  const target = page.locator("[data-testid='placement-target'][data-pose='0']");
+  const before = await target.getAttribute("data-x");
+  const box = await target.boundingBox();
+  if (!box || before == null) throw new Error("The arrow handle is not on the step.");
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 90, box.y + box.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await expect(target).not.toHaveAttribute("data-x", before);
+  const after = await target.getAttribute("data-x");
+  await page.reload();
+  await expect(page.getByTestId("step-heading")).toHaveText("Step 1");
+  await expect(page.locator("[data-testid='placement-target'][data-pose='0']")).toHaveAttribute("data-x", after ?? "");
+});
+
 test("shows the whole-set parts list", async ({ page }, testInfo) => {
   await createSet(page);
   await uploadPages(page);
