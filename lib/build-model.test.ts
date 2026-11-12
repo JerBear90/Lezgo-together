@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { buildScene } from "./build-model";
-import { lookupColor, lookupPart } from "./catalog";
+import { footprint, lookupColor, lookupPart } from "./catalog";
 import { buildDemoSet } from "./demo";
 import { orderedSteps } from "./editing";
-import { layoutScene } from "./iso";
+import { displayBricks, layoutScene } from "./iso";
 import { unknownPlacement } from "./placement";
 import type { BuildStep, Part } from "./types";
 
@@ -132,5 +132,37 @@ describe("build state", () => {
     const laid = layoutScene(opening);
     expect(laid.markers.filter((marker) => !marker.ghost)).toHaveLength(2);
     expect(laid.faces.length).toBeGreaterThan(0);
+  });
+
+  it("parks the unsure ghost under the model instead of beside it", () => {
+    const set = buildDemoSet(0);
+    const ordered = orderedSteps(set.pages, set.steps);
+    const shown = displayBricks(buildScene(ordered, "demo-step-5"));
+    const ghost = shown.find((brick) => !brick.confident);
+    expect(ghost).toBeTruthy();
+    if (!ghost) return;
+    const piece = footprint(ghost.size, ghost.rotation ?? 0);
+    const centerH = ghost.displayX + piece.w / 2 - (ghost.displayY + piece.d / 2);
+    const centerV = ghost.displayX + piece.w / 2 + (ghost.displayY + piece.d / 2);
+    let minH = Infinity;
+    let maxH = -Infinity;
+    let maxV = -Infinity;
+    for (const brick of shown.filter((item) => item.confident)) {
+      const box = footprint(brick.size, brick.rotation ?? 0);
+      for (const [x, z] of [
+        [brick.displayX, brick.displayY],
+        [brick.displayX + box.w, brick.displayY],
+        [brick.displayX, brick.displayY + box.d],
+        [brick.displayX + box.w, brick.displayY + box.d],
+      ] as Array<[number, number]>) {
+        minH = Math.min(minH, x - z);
+        maxH = Math.max(maxH, x - z);
+        maxV = Math.max(maxV, x + z);
+      }
+    }
+    expect(centerH).toBeGreaterThan(minH - 0.2);
+    expect(centerH).toBeLessThan(maxH + 0.2);
+    expect(centerV).toBeGreaterThan(maxV + 1);
+    expect(ghost.displayLayer).toBe(0);
   });
 });

@@ -45,25 +45,52 @@ export function buildScene(steps: BuildStep[], currentStepId: string | null): Bu
   return { bricks };
 }
 
+/** Smallest stud span of an unsure ghost, so a 1x1 still reads as a brick. */
+export const GHOST_MIN_STUDS = 2.4;
+
 export function ghostAnchor(
   ghostIndex: number,
   confident: Array<Pick<BrickInstance, "x" | "y" | "layer" | "size" | "rotation">>,
+  ghost: Pick<BrickInstance, "size" | "rotation">,
 ): { x: number; y: number; layer: number } {
-  let maxX = 0;
-  let sumY = 0;
-  let sumLayer = 0;
+  const piece = footprint(ghost.size, ghost.rotation ?? 0);
+  const bodyW = Math.max(piece.w, GHOST_MIN_STUDS);
+  const bodyD = Math.max(piece.d, GHOST_MIN_STUDS);
+  let minH = Infinity;
+  let maxH = -Infinity;
+  let maxV = -Infinity;
   let count = 0;
   for (const brick of confident) {
     if (brick.x == null || brick.y == null) continue;
-    maxX = Math.max(maxX, brick.x + footprint(brick.size, brick.rotation ?? 0).w);
-    sumY += brick.y;
-    sumLayer += brick.layer ?? 0;
+    const box = footprint(brick.size, brick.rotation ?? 0);
+    const corners: Array<[number, number]> = [
+      [brick.x, brick.y],
+      [brick.x + box.w, brick.y],
+      [brick.x, brick.y + box.d],
+      [brick.x + box.w, brick.y + box.d],
+    ];
+    for (const [x, z] of corners) {
+      minH = Math.min(minH, x - z);
+      maxH = Math.max(maxH, x - z);
+      maxV = Math.max(maxV, x + z);
+    }
     count += 1;
   }
+  if (count === 0 || !Number.isFinite(maxV)) {
+    const step = ghostIndex * (bodyW + 1);
+    return { x: step, y: step, layer: 0 };
+  }
+  // The camera looks from +x/+z, so larger x+z is lower on screen.
+  // Park the ghost on that side, centered, instead of beside the build.
+  const centerH = (minH + maxH) / 2;
+  const reach = (bodyW + bodyD) / 2;
+  const centerV = maxV + 0.8 + reach + ghostIndex * (bodyW + bodyD + 0.8);
+  const centerX = (centerV + centerH) / 2;
+  const centerZ = (centerV - centerH) / 2;
   return {
-    x: maxX + 1.25,
-    y: count > 0 ? sumY / count : ghostIndex * 2,
-    layer: count > 0 ? sumLayer / count : 0,
+    x: centerX - piece.w / 2,
+    y: centerZ - piece.d / 2,
+    layer: 0,
   };
 }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { OrbitControls as OrbitControlsType } from "three/examples/jsm/controls/OrbitControls.js";
-import { buildScene } from "@/lib/build-model";
+import { buildScene, GHOST_MIN_STUDS } from "@/lib/build-model";
 import { footprint, plateLayers } from "@/lib/catalog";
 import { displayBricks, layoutScene } from "@/lib/iso";
 import { brickPaint } from "@/lib/parts";
@@ -120,8 +120,8 @@ export function StepDiagram({
                 emissive: paint.dark ? studColor.clone().multiplyScalar(0.28) : 0x000000,
               })
             : material;
-          const bodyWidth = brick.confident ? w * 0.96 : Math.max(w, 2.4);
-          const bodyDepth = brick.confident ? d * 0.96 : Math.max(d, 2.4);
+          const bodyWidth = brick.confident ? w * 0.96 : Math.max(w, GHOST_MIN_STUDS);
+          const bodyDepth = brick.confident ? d * 0.96 : Math.max(d, GHOST_MIN_STUDS);
           const body = brick.shape === "round"
             ? new THREE.Mesh(new THREE.CylinderGeometry(Math.min(w, d) / 2 - 0.04, Math.min(w, d) / 2 - 0.04, height, 24), material)
             : new THREE.Mesh(new THREE.BoxGeometry(bodyWidth, height, bodyDepth), material);
@@ -164,6 +164,15 @@ export function StepDiagram({
 
         const corners = modelCorners(THREE, shown);
         const solidCorners = modelCorners(THREE, shown.filter((brick) => brick.confident));
+        const ghostCorners = modelCorners(THREE, shown.filter((brick) => !brick.confident));
+
+        function calloutReserve() {
+          let calloutH = 0;
+          panel.querySelectorAll<HTMLElement>("[data-testid='ghost-part']").forEach((node) => {
+            calloutH += node.offsetHeight + 8;
+          });
+          return Math.max(12, calloutH + 8);
+        }
 
         function frameCamera() {
           // Orthographic zoom is the frustum. Fit the model into the stage
@@ -191,11 +200,12 @@ export function StepDiagram({
           const tools = panel.querySelector("[data-testid='zoom-controls']");
           const toolsBottom = tools ? tools.getBoundingClientRect().bottom - panel.getBoundingClientRect().top : 76;
           const topInset = Math.min(Math.max(toolsBottom + 8, 72), height * 0.42);
-          const bottomInset = 12;
+          const bottomInset = calloutReserve();
           const usable = Math.max(height - topInset - bottomInset, 80);
           const screenCenter = topInset + usable / 2;
           const targetNdc = 1 - 2 * (screenCenter / height);
-          const halfH = Math.max(extY * height / (0.8 * usable), extX / (0.72 * aspect)) * viewScale.current;
+          const heightFill = bottomInset > 12 ? 0.94 : 0.8;
+          const halfH = Math.max(extY * height / (heightFill * usable), extX / (0.72 * aspect)) * viewScale.current;
           const halfW = halfH * aspect;
           const centerY = cy - targetNdc * halfH;
           camera.zoom = 1;
@@ -234,6 +244,13 @@ export function StepDiagram({
             panel.dataset.modelTop = String(Math.round(solid.top));
             panel.dataset.modelRight = String(Math.round(solid.right));
             panel.dataset.modelBottom = String(Math.round(solid.bottom));
+          }
+          const ghost = projectBox(ghostCorners, width, height);
+          if (ghost) {
+            panel.dataset.ghostLeft = String(Math.round(ghost.left));
+            panel.dataset.ghostTop = String(Math.round(ghost.top));
+            panel.dataset.ghostRight = String(Math.round(ghost.right));
+            panel.dataset.ghostBottom = String(Math.round(ghost.bottom));
           }
           panel.dataset.fitReady = "true";
         }
@@ -290,7 +307,8 @@ export function StepDiagram({
               moveMarker(panel, brick.key, left, topPx, left - 92, topPx - 72);
             } else {
               const solid = projectBox(solidCorners, width, height);
-              placeCallout(panel, brick.key, left, topPx, width, height, solid);
+              const ghost = projectBox(modelCorners(THREE, [brick]), width, height);
+              placeCallout(panel, brick.key, ghost, width, height, solid);
             }
           }
         }
@@ -313,8 +331,14 @@ export function StepDiagram({
         });
         observer.observe(mount);
         let frame = 0;
+        let reserved = 0;
         const loop = () => {
           controls.update();
+          const nextReserve = calloutReserve();
+          if (nextReserve !== reserved) {
+            reserved = nextReserve;
+            frameCamera();
+          }
           renderer.render(world, camera);
           projectMarkers();
           if (panel.dataset.mode !== "3d") panel.dataset.mode = "3d";
@@ -487,8 +511,7 @@ export function StepDiagram({
 function placeCallout(
   root: HTMLElement,
   key: string,
-  ghostX: number,
-  _ghostY: number,
+  ghost: { left: number; top: number; right: number; bottom: number } | null,
   stageW: number,
   stageH: number,
   model: { left: number; top: number; right: number; bottom: number } | null,
@@ -498,12 +521,14 @@ function placeCallout(
   const pad = 8;
   const boxW = el.offsetWidth || 144;
   const boxH = el.offsetHeight || 72;
-  const gap = 12;
-  const build = model ?? { left: 0, top: 0, right: 0, bottom: 0 };
-  const below = build.bottom + gap;
-  const above = build.top - gap - boxH;
-  const y = below + boxH <= stageH - pad ? below : above >= pad ? above : Math.max(pad, stageH - pad - boxH);
-  const x = Math.min(Math.max(ghostX - boxW / 2, pad), Math.max(pad, stageW - pad - boxW));
+  const gap = 8;
+  const belowGhost = ghost ? ghost.bottom + gap : null;
+  const belowModel = model ? model.bottom + gap : null;
+  const preferred = belowGhost ?? belowModel ?? pad;
+  const aboveGhost = ghost ? ghost.top - gap - boxH : -1;
+  const y = preferred + boxH <= stageH - pad ? preferred : aboveGhost >= pad ? aboveGhost : Math.max(pad, stageH - pad - boxH);
+  const centerX = ghost ? (ghost.left + ghost.right) / 2 : stageW / 2;
+  const x = Math.min(Math.max(centerX - boxW / 2, pad), Math.max(pad, stageW - pad - boxW));
   el.style.left = `${x}px`;
   el.style.top = `${y}px`;
   el.style.transform = "none";

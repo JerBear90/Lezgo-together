@@ -42,7 +42,7 @@ export function displayBricks(scene: BuildScene): DisplayBrick[] {
     if (brick.confident && brick.x != null && brick.y != null && brick.layer != null) {
       return { ...brick, displayX: brick.x, displayY: brick.y, displayLayer: brick.layer };
     }
-    const anchor = ghostAnchor(ghosts, confident);
+    const anchor = ghostAnchor(ghosts, confident, brick);
     ghosts += 1;
     return { ...brick, displayX: anchor.x, displayY: anchor.y, displayLayer: anchor.layer };
   });
