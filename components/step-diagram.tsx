@@ -164,32 +164,10 @@ export function StepDiagram({
 
         const corners = modelCorners(THREE, shown);
         const solidCorners = modelCorners(THREE, shown.filter((brick) => brick.confident));
-        const stageEl = mount.closest(".stage-view") as HTMLElement | null;
-
-        function sizeStage(extX: number, extY: number) {
-          const stage = stageEl;
-          const column = stage?.parentElement;
-          if (!stage || !column) return;
-          const ratio = extY / Math.max(extX, 0.2);
-          const width = Math.max(stage.clientWidth, 160);
-          const callout = shown.some((brick) => !brick.confident) ? 92 : 0;
-          const wanted = Math.round(Math.max(200, width * ratio * 1.05 + 64 + callout));
-          const used = [...column.children].reduce((sum, child) => {
-            if (child === stage) return sum;
-            return sum + (child as HTMLElement).offsetHeight;
-          }, 0);
-          const available = column.clientHeight - used - 8;
-          if (available < 140) return;
-          const height = Math.min(wanted, available);
-          if (Math.abs(stage.offsetHeight - height) > 2) {
-            stage.style.flex = "0 0 auto";
-            stage.style.height = `${height}px`;
-          }
-        }
 
         function frameCamera() {
-          // Fit the projected model, including ghosts, to about 76% of the stage
-          // and center that box. Orthographic zoom is the frustum, not distance.
+          // Orthographic zoom is the frustum. Fit the model into the stage
+          // below the zoom controls and center it there.
           camera.updateMatrixWorld(true);
           const inverse = camera.matrixWorldInverse;
           let minX = Infinity;
@@ -207,19 +185,24 @@ export function StepDiagram({
           const cy = Number.isFinite(minY) ? (minY + maxY) / 2 : 0;
           const extX = Math.max(Number.isFinite(minX) ? (maxX - minX) / 2 : 1, 0.45);
           const extY = Math.max(Number.isFinite(minY) ? (maxY - minY) / 2 : 1, 0.45);
-          sizeStage(extX, extY);
           const width = Math.max(mount.clientWidth, 1);
           const height = Math.max(mount.clientHeight, 1);
           const aspect = width / height;
-          // Flat models fill about 72% of the stage width. A taller build may
-          // use more of the height, and never spills past 82% of it.
-          const halfH = Math.max(extY / 0.82, extX / (0.72 * aspect)) * viewScale.current;
+          const tools = panel.querySelector("[data-testid='zoom-controls']");
+          const toolsBottom = tools ? tools.getBoundingClientRect().bottom - panel.getBoundingClientRect().top : 76;
+          const topInset = Math.min(Math.max(toolsBottom + 8, 72), height * 0.42);
+          const bottomInset = 12;
+          const usable = Math.max(height - topInset - bottomInset, 80);
+          const screenCenter = topInset + usable / 2;
+          const targetNdc = 1 - 2 * (screenCenter / height);
+          const halfH = Math.max(extY * height / (0.8 * usable), extX / (0.72 * aspect)) * viewScale.current;
           const halfW = halfH * aspect;
+          const centerY = cy - targetNdc * halfH;
           camera.zoom = 1;
           camera.left = cx - halfW;
           camera.right = cx + halfW;
-          camera.bottom = cy - halfH;
-          camera.top = cy + halfH;
+          camera.bottom = centerY - halfH;
+          camera.top = centerY + halfH;
           camera.updateProjectionMatrix();
           publishFit();
         }
@@ -306,7 +289,8 @@ export function StepDiagram({
             if (brick.confident) {
               moveMarker(panel, brick.key, left, topPx, left - 92, topPx - 72);
             } else {
-              placeCallout(panel, brick.key, left, topPx, width, height);
+              const solid = projectBox(solidCorners, width, height);
+              placeCallout(panel, brick.key, left, topPx, width, height, solid);
             }
           }
         }
@@ -348,10 +332,6 @@ export function StepDiagram({
         };
 
         cleanup = () => {
-          if (stageEl) {
-            stageEl.style.height = "";
-            stageEl.style.flex = "";
-          }
           window.cancelAnimationFrame(frame);
           renderer.domElement.removeEventListener("pointerup", onDoubleTap);
           observer.disconnect();
@@ -469,6 +449,7 @@ export function StepDiagram({
         <span
           key={`${marker.key}-chip`}
           data-chip={marker.key}
+          data-testid="arrow-label"
           className="pointer-events-none absolute z-10 -translate-x-0 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold"
           style={{ left: `${marker.tailX}%`, top: `${marker.tailY}%` }}
         >
@@ -488,7 +469,7 @@ export function StepDiagram({
         </div>
       ))}
       <p className="pointer-events-none absolute left-3 top-3 z-20 text-xs font-semibold text-muted">Drag to turn · pinch to zoom</p>
-      <div className="absolute top-8 left-2 z-20 flex gap-1">
+      <div data-testid="zoom-controls" className="absolute top-8 left-2 z-20 flex gap-1">
         <button type="button" data-zoom="out" aria-label="Zoom out" className="h-11 w-11 rounded-full bg-card text-lg font-semibold shadow" onClick={() => zoomRef.current(-1)}>
           −
         </button>
@@ -503,33 +484,26 @@ export function StepDiagram({
   );
 }
 
-function placeCallout(root: HTMLElement, key: string, ghostX: number, ghostY: number, stageW: number, stageH: number) {
+function placeCallout(
+  root: HTMLElement,
+  key: string,
+  ghostX: number,
+  _ghostY: number,
+  stageW: number,
+  stageH: number,
+  model: { left: number; top: number; right: number; bottom: number } | null,
+) {
   const el = root.querySelector<HTMLElement>(`[data-testid="ghost-part"][data-marker="${key}"]`);
   if (!el) return;
   const pad = 8;
   const boxW = el.offsetWidth || 144;
   const boxH = el.offsetHeight || 72;
-  const model = {
-    left: Number(root.dataset.modelLeft ?? root.dataset.fitLeft ?? 0),
-    top: Number(root.dataset.modelTop ?? root.dataset.fitTop ?? 0),
-    right: Number(root.dataset.modelRight ?? root.dataset.fitRight ?? stageW),
-    bottom: Number(root.dataset.modelBottom ?? root.dataset.fitBottom ?? stageH),
-  };
-  const gap = 16;
-  const candidates = [
-    { x: ghostX - boxW / 2, y: model.bottom + gap },
-    { x: ghostX - boxW / 2, y: model.top - boxH - gap },
-    { x: model.right + gap, y: ghostY - boxH / 2 },
-    { x: model.left - boxW - gap, y: ghostY - boxH / 2 },
-  ];
-  const overlaps = (x: number, y: number) =>
-    x < model.right - 4 && x + boxW > model.left + 4 && y < model.bottom - 4 && y + boxH > model.top + 4;
-  const inside = (x: number, y: number) => x >= pad && y >= pad && x + boxW <= stageW - pad && y + boxH <= stageH - pad;
-  const chosen = candidates.find((spot) => inside(spot.x, spot.y) && !overlaps(spot.x, spot.y))
-    ?? candidates.find((spot) => inside(spot.x, spot.y))
-    ?? candidates[0];
-  const x = Math.min(Math.max(chosen.x, pad), Math.max(pad, stageW - pad - boxW));
-  const y = Math.min(Math.max(chosen.y, pad), Math.max(pad, stageH - pad - boxH));
+  const gap = 12;
+  const build = model ?? { left: 0, top: 0, right: 0, bottom: 0 };
+  const below = build.bottom + gap;
+  const above = build.top - gap - boxH;
+  const y = below + boxH <= stageH - pad ? below : above >= pad ? above : Math.max(pad, stageH - pad - boxH);
+  const x = Math.min(Math.max(ghostX - boxW / 2, pad), Math.max(pad, stageW - pad - boxW));
   el.style.left = `${x}px`;
   el.style.top = `${y}px`;
   el.style.transform = "none";
@@ -543,13 +517,22 @@ function moveMarker(root: HTMLElement, key: string, left: number, top: number, t
     handle.style.left = `${left}px`;
     handle.style.top = `${top}px`;
   }
+  const tools = root.querySelector<HTMLElement>("[data-testid='zoom-controls']");
+  const floor = tools ? tools.offsetTop + tools.offsetHeight + 4 : 8;
+  const chipW = chip?.offsetWidth || 72;
+  const chipH = chip?.offsetHeight || 22;
+  let labelX = tailLeft;
+  let labelY = tailTop;
+  if (labelY < floor) labelY = floor;
+  labelX = Math.max(4, Math.min(labelX, root.clientWidth - chipW - 4));
+  labelY = Math.min(labelY, Math.max(floor, root.clientHeight - chipH - 4));
   if (chip) {
-    chip.style.left = `${tailLeft}px`;
-    chip.style.top = `${tailTop}px`;
+    chip.style.left = `${labelX}px`;
+    chip.style.top = `${labelY}px`;
   }
   if (line) {
-    line.setAttribute("x1", String(tailLeft));
-    line.setAttribute("y1", String(tailTop));
+    line.setAttribute("x1", String(labelX + chipW * 0.15));
+    line.setAttribute("y1", String(labelY + chipH));
     line.setAttribute("x2", String(left));
     line.setAttribute("y2", String(top));
   }
