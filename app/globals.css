@@ -285,8 +285,7 @@ body {
 
 @keyframes drop-in {
   from {
-    transform: translateY(-18px);
-    filter: drop-shadow(0 0 0 var(--color-lavender));
+    transform: translateY(12px);
   }
   to {
     transform: none;

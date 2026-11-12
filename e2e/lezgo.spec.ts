@@ -85,6 +85,9 @@ function inside(
 }
 
 async function expectStageUnderHeader(page: Page) {
+  await page.locator(".stage-view").evaluate(async (el) => {
+    await Promise.all(el.getAnimations().map((animation) => animation.finished));
+  });
   const layout = await page.evaluate(() => {
     const box = (selector: string) => document.querySelector(selector)?.getBoundingClientRect() ?? null;
     return {
