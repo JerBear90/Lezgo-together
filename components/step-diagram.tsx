@@ -163,42 +163,40 @@ export function StepDiagram({
         }
 
         const corners = modelCorners(THREE, shown);
+        const solidCorners = modelCorners(THREE, shown.filter((brick) => brick.confident));
 
-        function applyFrustum(halfH: number) {
+        function frameCamera() {
+          // Fit the projected model, including ghosts, to about 76% of the stage
+          // and center that box. Orthographic zoom is the frustum, not distance.
+          camera.updateMatrixWorld(true);
+          const inverse = camera.matrixWorldInverse;
+          let minX = Infinity;
+          let maxX = -Infinity;
+          let minY = Infinity;
+          let maxY = -Infinity;
+          for (const corner of corners) {
+            const viewed = corner.clone().applyMatrix4(inverse);
+            minX = Math.min(minX, viewed.x);
+            maxX = Math.max(maxX, viewed.x);
+            minY = Math.min(minY, viewed.y);
+            maxY = Math.max(maxY, viewed.y);
+          }
           const width = Math.max(mount.clientWidth, 1);
           const height = Math.max(mount.clientHeight, 1);
           const aspect = width / height;
+          const fill = 0.76;
+          const cx = Number.isFinite(minX) ? (minX + maxX) / 2 : 0;
+          const cy = Number.isFinite(minY) ? (minY + maxY) / 2 : 0;
+          const extX = Math.max(Number.isFinite(minX) ? (maxX - minX) / 2 : 1, 0.45);
+          const extY = Math.max(Number.isFinite(minY) ? (maxY - minY) / 2 : 1, 0.45);
+          const halfH = Math.max(extY / fill, extX / (fill * aspect)) * viewScale.current;
           const halfW = halfH * aspect;
           camera.zoom = 1;
-          camera.left = -halfW;
-          camera.right = halfW;
-          camera.top = halfH;
-          camera.bottom = -halfH;
+          camera.left = cx - halfW;
+          camera.right = cx + halfW;
+          camera.bottom = cy - halfH;
+          camera.top = cy + halfH;
           camera.updateProjectionMatrix();
-          camera.updateMatrixWorld(true);
-        }
-
-        function frameCamera() {
-          // Orthographic zoom is the frustum, not the camera distance. Fit the
-          // projected corners into the CSS-sized stage, leaving a margin.
-          let view = Math.max(bounds.span, 1);
-          const limit = 0.78;
-          for (let pass = 0; pass < 4; pass += 1) {
-            applyFrustum(view);
-            let maxAbs = 0;
-            for (const corner of corners) {
-              const projected = corner.clone().project(camera);
-              maxAbs = Math.max(maxAbs, Math.abs(projected.x), Math.abs(projected.y));
-            }
-            if (maxAbs < 0.001) break;
-            const next = view * (maxAbs / limit);
-            if (Math.abs(next - view) < 0.02) {
-              view = next;
-              break;
-            }
-            view = next;
-          }
-          applyFrustum(view * viewScale.current);
           publishFit();
         }
 
@@ -223,7 +221,32 @@ export function StepDiagram({
           panel.dataset.fitTop = String(Math.round(top));
           panel.dataset.fitRight = String(Math.round(right));
           panel.dataset.fitBottom = String(Math.round(bottom));
+          const solid = projectBox(solidCorners, width, height);
+          if (solid) {
+            panel.dataset.modelLeft = String(Math.round(solid.left));
+            panel.dataset.modelTop = String(Math.round(solid.top));
+            panel.dataset.modelRight = String(Math.round(solid.right));
+            panel.dataset.modelBottom = String(Math.round(solid.bottom));
+          }
           panel.dataset.fitReady = "true";
+        }
+
+        function projectBox(points: import("three").Vector3[], width: number, height: number) {
+          if (points.length === 0) return null;
+          let left = Infinity;
+          let top = Infinity;
+          let right = -Infinity;
+          let bottom = -Infinity;
+          for (const corner of points) {
+            const projected = corner.clone().project(camera);
+            const x = (projected.x * 0.5 + 0.5) * width;
+            const y = (-projected.y * 0.5 + 0.5) * height;
+            left = Math.min(left, x);
+            right = Math.max(right, x);
+            top = Math.min(top, y);
+            bottom = Math.max(bottom, y);
+          }
+          return { left, top, right, bottom };
         }
 
         function placeCamera() {
@@ -256,7 +279,11 @@ export function StepDiagram({
             const point = new THREE.Vector3(brick.displayX + w / 2, top, brick.displayY + d / 2).project(camera);
             const left = (point.x * 0.5 + 0.5) * width;
             const topPx = (-point.y * 0.5 + 0.5) * height;
-            moveMarker(panel, brick.key, left, topPx, left - 92, topPx - 72);
+            if (brick.confident) {
+              moveMarker(panel, brick.key, left, topPx, left - 92, topPx - 72);
+            } else {
+              placeCallout(panel, brick.key, left, topPx, width, height);
+            }
           }
         }
 
@@ -425,11 +452,11 @@ export function StepDiagram({
           key={marker.key}
           data-testid="ghost-part"
           data-marker={marker.key}
-          className="absolute z-20 max-w-40 -translate-x-1/2 rounded-2xl bg-unsure-bg px-2 py-1 text-unsure"
+          className="absolute z-20 w-36 rounded-2xl bg-unsure-bg px-2 py-1.5 text-unsure shadow-sm"
           style={{ left: `${marker.tipX}%`, top: `${marker.tipY}%` }}
         >
-          <UnsureBadge label={marker.note ?? "Unsure where this part goes."} />
-          <p className="mt-1 text-xs">{marker.note}</p>
+          <UnsureBadge compact label={marker.note ?? "Unsure where this part goes."} />
+          <p className="mt-1 text-xs leading-snug">{marker.note}</p>
         </div>
       ))}
       <p className="pointer-events-none absolute left-3 top-3 z-20 text-xs font-semibold text-muted">Drag to turn · pinch to zoom</p>
@@ -446,6 +473,38 @@ export function StepDiagram({
       </div>
     </div>
   );
+}
+
+function placeCallout(root: HTMLElement, key: string, ghostX: number, ghostY: number, stageW: number, stageH: number) {
+  const el = root.querySelector<HTMLElement>(`[data-testid="ghost-part"][data-marker="${key}"]`);
+  if (!el) return;
+  const pad = 8;
+  const boxW = el.offsetWidth || 144;
+  const boxH = el.offsetHeight || 72;
+  const model = {
+    left: Number(root.dataset.modelLeft ?? root.dataset.fitLeft ?? 0),
+    top: Number(root.dataset.modelTop ?? root.dataset.fitTop ?? 0),
+    right: Number(root.dataset.modelRight ?? root.dataset.fitRight ?? stageW),
+    bottom: Number(root.dataset.modelBottom ?? root.dataset.fitBottom ?? stageH),
+  };
+  const gap = 10;
+  const candidates = [
+    { x: ghostX - boxW / 2, y: model.bottom + gap },
+    { x: ghostX - boxW / 2, y: model.top - boxH - gap },
+    { x: model.right + gap, y: ghostY - boxH / 2 },
+    { x: model.left - boxW - gap, y: ghostY - boxH / 2 },
+  ];
+  const overlaps = (x: number, y: number) =>
+    x < model.right - 4 && x + boxW > model.left + 4 && y < model.bottom - 4 && y + boxH > model.top + 4;
+  const inside = (x: number, y: number) => x >= pad && y >= pad && x + boxW <= stageW - pad && y + boxH <= stageH - pad;
+  const chosen = candidates.find((spot) => inside(spot.x, spot.y) && !overlaps(spot.x, spot.y))
+    ?? candidates.find((spot) => inside(spot.x, spot.y))
+    ?? candidates[0];
+  const x = Math.min(Math.max(chosen.x, pad), Math.max(pad, stageW - pad - boxW));
+  const y = Math.min(Math.max(chosen.y, pad), Math.max(pad, stageH - pad - boxH));
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
+  el.style.transform = "none";
 }
 
 function moveMarker(root: HTMLElement, key: string, left: number, top: number, tailLeft: number, tailTop: number) {

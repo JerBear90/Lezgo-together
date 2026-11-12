@@ -47,14 +47,24 @@ export function buildScene(steps: BuildStep[], currentStepId: string | null): Bu
 
 export function ghostAnchor(
   ghostIndex: number,
-  confident: Array<Pick<BrickInstance, "x" | "size" | "rotation">>,
+  confident: Array<Pick<BrickInstance, "x" | "y" | "layer" | "size" | "rotation">>,
 ): { x: number; y: number; layer: number } {
   let maxX = 0;
+  let sumY = 0;
+  let sumLayer = 0;
+  let count = 0;
   for (const brick of confident) {
-    if (brick.x == null) continue;
+    if (brick.x == null || brick.y == null) continue;
     maxX = Math.max(maxX, brick.x + footprint(brick.size, brick.rotation ?? 0).w);
+    sumY += brick.y;
+    sumLayer += brick.layer ?? 0;
+    count += 1;
   }
-  return { x: maxX + 2, y: ghostIndex * 3, layer: 0 };
+  return {
+    x: maxX + 1.25,
+    y: count > 0 ? sumY / count : ghostIndex * 2,
+    layer: count > 0 ? sumLayer / count : 0,
+  };
 }
 
 function instancesFor(step: BuildStep, part: Part, isNew: boolean): BrickInstance[] {

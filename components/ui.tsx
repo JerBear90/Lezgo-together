@@ -21,22 +21,32 @@ export function BenchLoading({ label }: { label: string }) {
   );
 }
 
-export function UnsureBadge({ label }: { label: string }) {
+export function UnsureBadge({ label, compact = false }: { label: string; compact?: boolean }) {
   return (
     <span className="inline-flex items-center gap-1" title={label}>
       <span
         data-testid="unsure-badge"
-        className="inline-flex items-center gap-1 rounded-full bg-unsure-bg px-2 py-0.5 text-xs font-bold text-unsure"
+        className={
+          compact
+            ? "inline-flex h-5 w-5 items-center justify-center rounded-full bg-unsure text-[12px] font-bold leading-none text-white"
+            : "inline-flex items-center gap-1 rounded-full bg-unsure-bg px-2 py-0.5 text-xs font-bold text-unsure"
+        }
       >
-        <span
-          aria-hidden="true"
-          className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-unsure text-[11px] leading-none text-white"
-        >
-          ?
-        </span>
-        Unsure
+        {compact ? (
+          "?"
+        ) : (
+          <>
+            <span
+              aria-hidden="true"
+              className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-unsure text-[11px] leading-none text-white"
+            >
+              ?
+            </span>
+            Unsure
+          </>
+        )}
       </span>
-      <span className="sr-only">{label}</span>
+      <span className="sr-only">{compact ? `Unsure. ${label}` : label}</span>
     </span>
   );
 }
