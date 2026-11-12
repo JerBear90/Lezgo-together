@@ -8,11 +8,13 @@ export function StepImage({
   region,
   alt,
   children,
+  fill = false,
 }: {
   src: string;
   region: BuildStep["region"];
   alt: string;
   children?: ReactNode;
+  fill?: boolean;
 }) {
   const [ratio, setRatio] = useState(2.2);
   if (!region) {
@@ -25,7 +27,11 @@ export function StepImage({
     );
   }
   return (
-    <div data-testid="step-image" className="relative w-full overflow-hidden bg-[#efe6d6]" style={{ aspectRatio: ratio }}>
+    <div
+      data-testid="step-image"
+      className={fill ? "relative h-full w-full overflow-hidden bg-[#efe6d6]" : "relative w-full overflow-hidden bg-[#efe6d6]"}
+      style={fill ? undefined : { aspectRatio: ratio }}
+    >
       {/* Local booklet photos are data URLs positioned by the step region. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img

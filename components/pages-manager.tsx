@@ -15,6 +15,7 @@ import { retakeMessage } from "@/lib/labels";
 import { requestPageRead } from "@/lib/read-page";
 import { createId } from "@/lib/ids";
 import type { BrickSet } from "@/lib/types";
+import { MissingSet } from "./missing-set";
 import { BenchLoading, TopBar } from "./ui";
 import { useAiMode, useBrickSet } from "./use-set";
 
@@ -82,14 +83,7 @@ export function PagesManager({ id }: { id: string }) {
   }
 
   if (loading) return <BenchLoading label="Opening pages" />;
-  if (missing || !set) {
-    return (
-      <>
-        <TopBar title="Missing set" backHref="/" backLabel="Sets" />
-        <p className="px-4 py-8">That set is not on this device.</p>
-      </>
-    );
-  }
+  if (missing || !set) return <MissingSet />;
 
   const pages = [...set.pages].sort((a, b) => a.order - b.order);
   const steps = orderedSteps(set.pages, set.steps);

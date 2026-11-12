@@ -39,6 +39,16 @@ export function normalizeCode(input: string): string {
   return input.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
+const NO_ROOM_MEMBERS: never[] = [];
+
+export function lobbyMembers<T>(roomCode: string | null, members: T[]): T[] {
+  return roomCode ? members : NO_ROOM_MEMBERS;
+}
+
+export function partyHeadline(memberCount: number): string {
+  return memberCount < 2 ? "Waiting for Builders" : "Start party!";
+}
+
 export function formatRoomCode(code: string): string {
   const compact = code.replace(/\s/g, "");
   if (compact.length < 4) return compact;

@@ -17,6 +17,7 @@ import {
   togglePart,
 } from "@/lib/player";
 import { playableSteps, progressFor, savePlayerProgress, sectionAt, sectionSpans } from "@/lib/sections";
+import { MissingSet } from "./missing-set";
 import { BenchLoading, UnsureBadge } from "./ui";
 import { RoomSync } from "./room-sync";
 import { usePlayers } from "./use-players";
@@ -79,13 +80,7 @@ export function StepPlayer({ id }: { id: string }) {
 
   if (loading || !active) return <BenchLoading label="Opening the build" />;
   const player = active;
-  if (missing || !set) {
-    return (
-      <p className="px-4 py-8">
-        That set is not on this device. <Link href="/">Back to sets</Link>
-      </p>
-    );
-  }
+  if (missing || !set) return <MissingSet />;
   if (!progress || !step || !shownStep) {
     return (
       <main className="px-4 py-10 text-center">
@@ -207,8 +202,17 @@ export function StepPlayer({ id }: { id: string }) {
             {section?.name ?? "Build"}
           </p>
           <h1 ref={headingRef} tabIndex={-1} data-testid="step-heading" className="stage-step">
-            Step {step.stepNumber}
+            {preview != null && preview !== index ? `Preview ${shownStep.stepNumber}` : `Step ${step.stepNumber}`}
           </h1>
+          {view === "diagram" ? (
+            <button type="button" data-testid="show-photo" className="btn-lip shrink-0 px-3 text-sm font-extrabold" onClick={() => setView("photo")}>
+              Photo
+            </button>
+          ) : (
+            <button type="button" data-testid="show-diagram" className="btn-lip shrink-0 px-3 text-sm font-extrabold" onClick={() => setView("diagram")}>
+              Diagram
+            </button>
+          )}
           <Link href={`/sets/${id}`} className="close-x" aria-label="Close">
             ×
           </Link>
@@ -217,7 +221,7 @@ export function StepPlayer({ id }: { id: string }) {
           {view === "diagram" ? (
             <StepDiagram steps={steps} stepId={shownStep.id} onShift={shift} onSelect={setSelectedPartId} />
           ) : page ? (
-            <StepImage src={page.imageDataUrl} region={shownStep.region} alt={shownStep.description}>
+            <StepImage fill src={page.imageDataUrl} region={shownStep.region} alt={shownStep.description}>
               <PhotoArrows parts={shownStep.parts} />
             </StepImage>
           ) : null}
@@ -250,6 +254,11 @@ export function StepPlayer({ id }: { id: string }) {
             <p data-testid="placement-retake" className="stage-note">
               Retake this photo. A straighter, closer shot would show the studs.
             </p>
+          ) : null}
+          {preview != null && preview !== index ? (
+            <button type="button" data-testid="confirm-jump" className="btn-sun mt-2 px-3 py-2 text-sm font-extrabold" onClick={confirmJump}>
+              Go to step {steps[preview]?.stepNumber}
+            </button>
           ) : null}
           {atSectionStart && section ? (
             <p data-testid="bag-open" className="stage-note">
@@ -290,17 +299,6 @@ export function StepPlayer({ id }: { id: string }) {
             Next
           </button>
         )}
-        <div className="stage-tools">
-          {view === "diagram" ? (
-            <button type="button" data-testid="show-photo" className="btn-lip px-3 text-sm font-extrabold" onClick={() => setView("photo")}>
-              Photo
-            </button>
-          ) : (
-            <button type="button" data-testid="show-diagram" className="btn-lip px-3 text-sm font-extrabold" onClick={() => setView("diagram")}>
-              Diagram
-            </button>
-          )}
-        </div>
         <div className="stage-slider">
           <div className="mb-1 flex gap-1 overflow-x-auto">
             {sections.map((item) => (
@@ -328,11 +326,6 @@ export function StepPlayer({ id }: { id: string }) {
               }}
             />
           </label>
-          {preview != null && preview !== index ? (
-            <button type="button" data-testid="confirm-jump" className="btn-sun mt-2 px-3 py-2 text-sm font-extrabold" onClick={confirmJump}>
-              Go to step {steps[preview]?.stepNumber}
-            </button>
-          ) : null}
         </div>
       </div>
     </div>

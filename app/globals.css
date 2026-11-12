@@ -76,16 +76,17 @@ body {
 }
 
 .pill-nav {
-  position: fixed;
   z-index: 30;
-  bottom: 16px;
-  left: 50%;
   display: flex;
-  transform: translateX(-50%);
+  justify-content: center;
   gap: 4px;
+  margin: 8px auto 10px;
+  width: fit-content;
+  max-width: calc(100% - 24px);
   border-radius: 999px;
   background: #fff;
   padding: 6px;
+  padding-bottom: max(6px, env(safe-area-inset-bottom));
   box-shadow: 0 6px 0 var(--color-lip), 0 14px 30px rgba(20, 40, 70, 0.14);
 }
 
@@ -224,6 +225,7 @@ body {
   padding: 6px 10px;
   font-size: 14px;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .close-x {
@@ -242,7 +244,7 @@ body {
 
 .stage-view {
   position: absolute;
-  inset: 64px 8px 148px 8px;
+  inset: 64px 8px 196px 8px;
 }
 
 .stage-ease {
@@ -263,9 +265,9 @@ body {
   position: absolute;
   z-index: 20;
   right: 12px;
-  bottom: 132px;
+  bottom: 168px;
   left: 12px;
-  max-height: 72px;
+  max-height: 110px;
   overflow: auto;
   font-size: 12px;
   font-weight: 700;
@@ -283,7 +285,7 @@ body {
 .stage-next {
   position: absolute;
   z-index: 30;
-  bottom: 78px;
+  bottom: 92px;
   display: inline-flex;
   min-height: 56px;
   min-width: 88px;
@@ -301,19 +303,12 @@ body {
   right: 12px;
 }
 
-.stage-tools {
-  position: absolute;
-  z-index: 30;
-  top: 62px;
-  right: 12px;
-}
-
 .stage-slider {
   position: absolute;
   z-index: 30;
-  right: 12px;
-  bottom: 10px;
-  left: 12px;
+  right: 108px;
+  bottom: 8px;
+  left: 108px;
 }
 
 .stud-slider input {

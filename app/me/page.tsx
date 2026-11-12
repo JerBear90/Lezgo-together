@@ -1,63 +1,65 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useState } from "react";
+import { usePlayers } from "@/components/use-players";
+import { PLAYER_COLORS, savePlayer } from "@/lib/players";
 
-const colors = ["Yellow", "Red", "Blue", "Green", "Orange", "Purple"];
-
-function subscribe(onStoreChange: () => void) {
-  window.addEventListener("storage", onStoreChange);
-  window.addEventListener("lezgo-me", onStoreChange);
-  return () => {
-    window.removeEventListener("storage", onStoreChange);
-    window.removeEventListener("lezgo-me", onStoreChange);
-  };
-}
-
-function readRaw() {
-  return window.localStorage.getItem("lezgo-me") ?? "";
-}
-
-function parseProfile(raw: string) {
-  if (!raw) return { name: "Builder", color: "Yellow" };
-  try {
-    const parsed = JSON.parse(raw) as { name?: string; color?: string };
-    return { name: parsed.name || "Builder", color: parsed.color || "Yellow" };
-  } catch {
-    return { name: "Builder", color: "Yellow" };
-  }
-}
+const names: Record<string, string> = {
+  "#e23d2b": "red",
+  "#2f6fdd": "blue",
+  "#1d6b48": "green",
+  "#ef7d2a": "orange",
+  "#7a4cc2": "purple",
+  "#c2881a": "yellow",
+};
 
 export default function MePage() {
-  const raw = useSyncExternalStore(subscribe, readRaw, () => "");
-  const profile = parseProfile(raw);
+  const { active, loading } = usePlayers();
+  const [draft, setDraft] = useState<string | null>(null);
+  if (loading || !active) return <p className="px-5 py-8">Opening profile…</p>;
+  const profile = active;
+  const name = draft ?? profile.name;
 
-  function save(name: string, color: string) {
-    window.localStorage.setItem("lezgo-me", JSON.stringify({ name: name.slice(0, 24), color }));
-    window.dispatchEvent(new Event("lezgo-me"));
+  async function save(nextName: string, color: string) {
+    await savePlayer({
+      ...profile,
+      name: nextName.trim().slice(0, 24) || "Builder",
+      color,
+      updatedAt: Date.now(),
+    });
+    window.dispatchEvent(new Event("lezgo-players"));
   }
+
+  const colour = names[profile.color.toLowerCase()] ?? "red";
 
   return (
     <main className="px-5 py-8">
       <h1 className="font-display text-4xl">Me</h1>
-      <p className="mt-2 text-sm text-muted">A name and a colour on this device. No account.</p>
+      <p className="mt-2 text-sm text-muted">Same builder as the bar at the top. No account.</p>
       <label className="mt-6 block text-sm font-bold">
         Name
         <input
-          value={profile.name}
-          onChange={(event) => save(event.target.value, profile.color)}
+          value={name}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            void save(event.target.value, profile.color);
+          }}
           className="mt-1 w-full rounded-2xl border border-line bg-card px-3 py-3 font-bold"
         />
       </label>
-      <p className="mt-5 text-sm font-bold">Your colour is {profile.color.toLowerCase()}</p>
+      <p className="mt-5 text-sm font-bold" data-testid="me-colour">
+        Your colour is {colour}
+      </p>
       <div className="mt-2 flex flex-wrap gap-2">
-        {colors.map((swatch) => (
+        {PLAYER_COLORS.map((swatch) => (
           <button
             key={swatch}
             type="button"
-            onClick={() => save(profile.name, swatch)}
+            aria-label={names[swatch] ?? swatch}
+            onClick={() => void save(name, swatch)}
             className={`btn-lip min-h-11 px-3 text-sm font-extrabold ${profile.color === swatch ? "btn-sun" : ""}`}
           >
-            {swatch}
+            {names[swatch] ?? swatch}
           </button>
         ))}
       </div>

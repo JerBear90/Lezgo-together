@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { buildDemoSet, DEMO_SET_ID } from "@/lib/demo";
 import { getSet, listSets, saveSet } from "@/lib/db";
 import type { BrickSet } from "@/lib/types";
 
@@ -13,8 +14,16 @@ export function useBrickSet(id: string) {
     let cancel = false;
     const load = () => {
       getSet(id)
-        .then((row) => {
+        .then(async (row) => {
           if (cancel) return;
+          if (!row && id === DEMO_SET_ID) {
+            const seeded = buildDemoSet();
+            await saveSet(seeded);
+            if (cancel) return;
+            ref.current = seeded;
+            setSet(seeded);
+            return;
+          }
           ref.current = row;
           setSet(row);
         })
