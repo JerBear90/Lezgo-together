@@ -147,6 +147,7 @@ export function StepPlayer({ id }: { id: string }) {
   return (
     <div className="stage-screen" data-testid="step-player">
       <RoomSync setId={id} />
+      <div className="stage-head" data-testid="stage-head">
       <aside className="stage-parts" aria-label="Parts for this step">
         {shownStep.parts.length === 0 ? <p className="text-xs font-bold text-ink/70">No pieces</p> : null}
         {shownStep.parts.map((part) => {
@@ -180,6 +181,27 @@ export function StepPlayer({ id }: { id: string }) {
           );
         })}
       </aside>
+        <div className="stage-top">
+          <p data-testid="section-chip" className="section-chip">
+            {section?.name ?? "Build"}
+          </p>
+          <h1 ref={headingRef} tabIndex={-1} data-testid="step-heading" className="stage-step">
+            {preview != null && preview !== index ? `Preview ${shownStep.stepNumber}` : `Step ${step.stepNumber}`}
+          </h1>
+          {view === "diagram" ? (
+            <button type="button" data-testid="show-photo" className="btn-lip shrink-0 px-3 text-sm font-extrabold" onClick={() => setView("photo")}>
+              Photo
+            </button>
+          ) : (
+            <button type="button" data-testid="show-diagram" className="btn-lip shrink-0 px-3 text-sm font-extrabold" onClick={() => setView("diagram")}>
+              Diagram
+            </button>
+          )}
+          <Link href={`/sets/${id}`} className="close-x" aria-label="Close">
+            ×
+          </Link>
+        </div>
+      </div>
       <div
         className="stage-main"
         onPointerDown={(event) => {
@@ -201,26 +223,6 @@ export function StepPlayer({ id }: { id: string }) {
           }
         }}
       >
-        <div className="stage-top">
-          <p data-testid="section-chip" className="section-chip">
-            {section?.name ?? "Build"}
-          </p>
-          <h1 ref={headingRef} tabIndex={-1} data-testid="step-heading" className="stage-step">
-            {preview != null && preview !== index ? `Preview ${shownStep.stepNumber}` : `Step ${step.stepNumber}`}
-          </h1>
-          {view === "diagram" ? (
-            <button type="button" data-testid="show-photo" className="btn-lip shrink-0 px-3 text-sm font-extrabold" onClick={() => setView("photo")}>
-              Photo
-            </button>
-          ) : (
-            <button type="button" data-testid="show-diagram" className="btn-lip shrink-0 px-3 text-sm font-extrabold" onClick={() => setView("diagram")}>
-              Diagram
-            </button>
-          )}
-          <Link href={`/sets/${id}`} className="close-x" aria-label="Close">
-            ×
-          </Link>
-        </div>
         <div key={shownStep.id} className="stage-view stage-ease">
           {view === "diagram" ? (
             <StepDiagram steps={steps} stepId={shownStep.id} onShift={shift} onSelect={setSelectedPartId} />

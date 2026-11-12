@@ -13,6 +13,16 @@ function player(id: string, name: string): PlayerProfile {
   return { id, name, color: "#e23d2b", createdAt: 1, updatedAt: 1 };
 }
 
+function stamp<T extends { progressByPlayer: Record<string, { updatedAt: number }> }>(set: T, playerId: string, updatedAt: number): T {
+  return {
+    ...set,
+    progressByPlayer: {
+      ...set.progressByPlayer,
+      [playerId]: { ...set.progressByPlayer[playerId], updatedAt },
+    },
+  };
+}
+
 describe("room sync", () => {
   it("shows a 6-digit code as two groups", () => {
     expect(formatRoomCode("123456")).toBe("123 456");
@@ -88,31 +98,43 @@ describe("room sync", () => {
 
   it("keeps the other player's checks when two people update the same part", () => {
     const set = buildDemoSet(1);
-    const ada = savePlayerProgress(set, "ada", {
-      ...emptyProgress(),
-      currentStepId: "demo-step-1",
-      checkedByStep: { "demo-step-1": ["demo-step-1-p1"] },
-      updatedAt: 10,
-    });
-    const both = savePlayerProgress(ada, "bea", {
-      ...emptyProgress(),
-      currentStepId: "demo-step-4",
-      checkedByStep: { "demo-step-4": ["demo-step-4-p1"] },
-      updatedAt: 20,
-    });
-    const adaLater = savePlayerProgress(both, "ada", {
-      ...both.progressByPlayer.ada,
-      checkedByStep: { "demo-step-1": [] },
-      updatedAt: 5,
-    });
+    const ada = stamp(
+      savePlayerProgress(set, "ada", {
+        ...emptyProgress(),
+        currentStepId: "demo-step-1",
+        checkedByStep: { "demo-step-1": ["demo-step-1-p1"] },
+      }),
+      "ada",
+      10,
+    );
+    const both = stamp(
+      savePlayerProgress(ada, "bea", {
+        ...emptyProgress(),
+        currentStepId: "demo-step-4",
+        checkedByStep: { "demo-step-4": ["demo-step-4-p1"] },
+      }),
+      "bea",
+      20,
+    );
+    const adaLater = stamp(
+      savePlayerProgress(both, "ada", {
+        ...both.progressByPlayer.ada,
+        checkedByStep: { "demo-step-1": [] },
+      }),
+      "ada",
+      5,
+    );
     const merged = mergeSetSnapshot(both, adaLater);
     expect(merged.progressByPlayer.bea.checkedByStep["demo-step-4"]).toEqual(["demo-step-4-p1"]);
     expect(merged.progressByPlayer.ada.checkedByStep["demo-step-1"]).toEqual(["demo-step-1-p1"]);
-    const newerAda = savePlayerProgress(both, "ada", {
-      ...both.progressByPlayer.ada,
-      checkedByStep: { "demo-step-1": [] },
-      updatedAt: 30,
-    });
+    const newerAda = stamp(
+      savePlayerProgress(both, "ada", {
+        ...both.progressByPlayer.ada,
+        checkedByStep: { "demo-step-1": [] },
+      }),
+      "ada",
+      30,
+    );
     const won = mergePlayerProgress(merged.progressByPlayer, newerAda.progressByPlayer);
     expect(won.ada.checkedByStep["demo-step-1"]).toEqual([]);
     expect(won.bea.checkedByStep["demo-step-4"]).toEqual(["demo-step-4-p1"]);
