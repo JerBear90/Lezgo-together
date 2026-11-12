@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Outfit } from "next/font/google";
+import { PersistStorage } from "@/components/persist-storage";
+import { PlayerBar } from "@/components/player-bar";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -27,8 +29,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${outfit.variable} ${fraunces.variable} h-full antialiased`}>
       <body>
+        <PersistStorage />
         <div className="desk">
-          <div className="phone">{children}</div>
+          <div className="phone flex h-dvh flex-col">
+            <PlayerBar />
+            <div className="min-h-0 flex-1 overflow-auto">{children}</div>
+          </div>
         </div>
       </body>
     </html>

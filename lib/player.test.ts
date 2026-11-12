@@ -10,11 +10,13 @@ import {
   jumpTo,
   progressFraction,
   reconcileProgress,
+  resumeLabel,
   stepIndex,
   swipeDirection,
   togglePart,
 } from "./player";
 import { unknownPlacement } from "./placement";
+import { assignSection, defaultCombine, playableSteps, savePlayerProgress, splitOffSection } from "./sections";
 import type { BrickSet, BuildStep, Part } from "./types";
 
 function part(id: string, overrides: Partial<Part> = {}): Part {
@@ -58,7 +60,9 @@ function setWith(steps: BuildStep[]): BrickSet {
       { id: "p2", order: 1, imageDataUrl: "data:", fileName: "b.jpg", status: "ready", retake: null },
     ],
     steps,
-    progress: emptyProgress(),
+    progressByPlayer: { ada: emptyProgress() },
+    sections: [],
+    combine: defaultCombine(),
     sample: false,
   };
 }
@@ -107,8 +111,67 @@ describe("step player", () => {
   });
 
   it("falls back when the saved step was removed", () => {
-    const reconciled = reconcileProgress({ currentStepId: "missing", checkedByStep: {} }, steps);
+    const reconciled = reconcileProgress({ ...emptyProgress(), currentStepId: "missing" }, steps);
     expect(reconciled.currentStepId).toBe("s1");
+  });
+});
+
+describe("players and sections", () => {
+  it("stores progress separately for each player", () => {
+    const steps = [step("s1", "p1", 1, [part("a")]), step("s2", "p1", 2, [part("b")])];
+    let set = setWith(steps);
+    set = savePlayerProgress(set, "ada", togglePart(emptyProgress(), "s1", "a"));
+    set = savePlayerProgress(set, "bea", goNext(steps, togglePart(emptyProgress(), "s2", "b")));
+    expect(set.progressByPlayer.ada.checkedByStep).toEqual({ s1: ["a"] });
+    expect(set.progressByPlayer.ada.currentStepId).toBeNull();
+    expect(set.progressByPlayer.bea.currentStepId).toBe("s2");
+    expect(set.progressByPlayer.bea.checkedByStep.s2).toEqual(["b"]);
+    expect(set.progressByPlayer.ada.checkedByStep.s2).toBeUndefined();
+    const adaSteps = playableSteps(set, "ada");
+    expect(resumeLabel(adaSteps, set.progressByPlayer.ada)).toBeNull();
+    const moved = savePlayerProgress(set, "ada", { ...set.progressByPlayer.ada, currentStepId: "s2" });
+    expect(resumeLabel(playableSteps(moved, "ada"), moved.progressByPlayer.ada)).toBe(
+      "Continue where you left off: Step 2",
+    );
+  });
+
+  it("gives each assigned player only their section, plus the combine step", () => {
+    const steps = [
+      step("s1", "p1", 1, [part("a")]),
+      step("s2", "p1", 2, [part("b")]),
+      step("s3", "p2", 3, [part("c")]),
+    ];
+    let set = setWith(steps);
+    set = {
+      ...set,
+      sections: [
+        {
+          id: "hull",
+          name: "Hull",
+          stepIds: ["s1", "s2"],
+          assigneeId: null,
+          certainty: "certain",
+          uncertaintyNote: null,
+        },
+        {
+          id: "cabin",
+          name: "Cabin",
+          stepIds: ["s3"],
+          assigneeId: null,
+          certainty: "uncertain",
+          uncertaintyNote: "The cabin may start at step 2.",
+        },
+      ],
+    };
+    set = assignSection(set, "hull", "ada");
+    set = assignSection(set, "cabin", "bea");
+    expect(playableSteps(set, "ada").map((item) => item.stepNumber)).toEqual([1, 2, 0]);
+    expect(playableSteps(set, "bea").map((item) => item.id)).toEqual(["s3", "combine:set"]);
+    expect(playableSteps(set, "bea")[1]?.placementCertainty).toBe(set.combine.certainty);
+    const split = splitOffSection(set, "s2", "Deck", "deck");
+    expect(split.sections.map((section) => section.name)).toEqual(["Hull", "Cabin", "Deck"]);
+    expect(split.sections.find((section) => section.name === "Hull")?.stepIds).toEqual(["s1"]);
+    expect(split.sections.find((section) => section.name === "Deck")?.certainty).toBe("certain");
   });
 });
 
@@ -128,17 +191,25 @@ describe("editing and parts rollup", () => {
         placementNote: "Side is unclear.",
         region: { x: 0.4, y: 0.1, width: 0.5, height: 0.2 },
       }),
+      step("s3", "p2", 3, [part("c")]),
     ]);
     const merged = mergeSteps(
-      { ...set, progress: { currentStepId: "s1", checkedByStep: { s1: ["a"], s2: ["u"] } } },
+      {
+        ...set,
+        progressByPlayer: {
+          ada: { ...emptyProgress(), currentStepId: "s1", checkedByStep: { s1: ["a"], s2: ["u"] } },
+          bea: { ...emptyProgress(), currentStepId: "s3", checkedByStep: {} },
+        },
+      },
       0,
     );
-    expect(merged.steps).toHaveLength(1);
+    expect(merged.steps).toHaveLength(2);
     expect(merged.steps[0]?.placementCertainty).toBe("uncertain");
     expect(merged.steps[0]?.parts.map((item) => item.certainty)).toEqual(["certain", "uncertain"]);
     expect(merged.steps[0]?.parts[1]?.color).toBe("Unclear");
     expect(merged.steps[0]?.region).toMatchObject({ x: 0, width: 0.9 });
-    expect(merged.progress.checkedByStep.s1).toEqual(expect.arrayContaining(["a", "u"]));
+    expect(merged.progressByPlayer.ada.checkedByStep.s1).toEqual(expect.arrayContaining(["a", "u"]));
+    expect(merged.progressByPlayer.bea.currentStepId).toBe("s3");
   });
 
   it("splits a step and keeps each part's certainty", () => {

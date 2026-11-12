@@ -1,5 +1,4 @@
 import type { BrickSet, BuildStep, InstructionPage, Part, PartPlacement, Region } from "./types";
-import { emptyProgress } from "./player";
 
 export const DEMO_SET_ID = "demo-harbor-tug";
 
@@ -199,7 +198,38 @@ export function buildDemoSet(now = Date.now()): BrickSet {
     updatedAt: now,
     pages,
     steps,
-    progress: emptyProgress(),
+    progressByPlayer: {},
+    sections: [
+      {
+        id: "demo-section-hull",
+        name: "Hull",
+        stepIds: ["demo-step-1", "demo-step-2", "demo-step-3"],
+        assigneeId: null,
+        certainty: "certain",
+        uncertaintyNote: null,
+      },
+      {
+        id: "demo-section-cabin",
+        name: "Cabin",
+        stepIds: ["demo-step-4", "demo-step-5", "demo-step-6"],
+        assigneeId: null,
+        certainty: "certain",
+        uncertaintyNote: null,
+      },
+      {
+        id: "demo-section-details",
+        name: "Details",
+        stepIds: ["demo-step-7", "demo-step-8"],
+        assigneeId: null,
+        certainty: "uncertain",
+        uncertaintyNote: "Cannot tell whether the funnel and flag are their own sub-build or the end of the cabin.",
+      },
+    ],
+    combine: {
+      description: "The cabin has to meet the hull, but the booklet does not show a separate joining step.",
+      certainty: "uncertain",
+      uncertaintyNote: "Cannot tell where the sub-builds are meant to come together.",
+    },
     sample: true,
   };
 }

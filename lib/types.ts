@@ -74,6 +74,8 @@ export type ParsedExtraction = {
   pageSummary: string;
   retake: RetakeFlag;
   steps: StepSpec[];
+  sections: ParsedSection[];
+  combine: CombinePoint;
 };
 
 export type Part = PartSpec & { id: string };
@@ -99,6 +101,49 @@ export type InstructionPage = {
 export type SetProgress = {
   currentStepId: string | null;
   checkedByStep: Record<string, string[]>;
+  /** Scroll position of the step sheet, saved as the builder moves. */
+  sheetScrollTop: number;
+  /** Scroll position of the zoomed step image. */
+  imageScrollTop: number;
+  /** 1 is the fitted crop. */
+  zoom: number;
+  updatedAt: number;
+};
+
+/** A sub-build such as the hull or the cabin. stepIds are local step ids. */
+export type BuildSection = {
+  id: string;
+  name: string;
+  stepIds: string[];
+  assigneeId: string | null;
+  certainty: Certainty;
+  uncertaintyNote: string | null;
+};
+
+export type ParsedSection = {
+  name: string;
+  stepNumbers: number[];
+  certainty: Certainty;
+  uncertaintyNote: string | null;
+};
+
+/** Where separate sub-builds are meant to join. */
+export type CombinePoint = {
+  description: string;
+  certainty: Certainty;
+  uncertaintyNote: string | null;
+};
+
+/**
+ * One builder on this device. No account. `updatedAt` is here so a later
+ * sync can ship player records without rewriting page photos.
+ */
+export type PlayerProfile = {
+  id: string;
+  name: string;
+  color: string;
+  createdAt: number;
+  updatedAt: number;
 };
 
 export type BrickSet = {
@@ -109,7 +154,13 @@ export type BrickSet = {
   updatedAt: number;
   pages: InstructionPage[];
   steps: BuildStep[];
-  progress: SetProgress;
+  /**
+   * Progress keyed by player id. Each entry is small enough to sync later
+   * without the page images. This device does not sync it anywhere.
+   */
+  progressByPlayer: Record<string, SetProgress>;
+  sections: BuildSection[];
+  combine: CombinePoint;
   sample: boolean;
 };
 

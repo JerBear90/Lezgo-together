@@ -31,14 +31,14 @@ export function PagesManager({ id }: { id: string }) {
   async function readIds(start: BrickSet, pageIds: string[]) {
     let working = start;
     for (const pageId of pageIds) {
-      working = commit(markPageReading(working, pageId));
+      working = await commit(markPageReading(working, pageId));
       try {
         const result = await requestPageRead(working, pageId);
-        working = commit(result.next);
+        working = await commit(result.next);
         if (result.notice) setNotice(result.notice);
       } catch (readError) {
         const message = readError instanceof Error ? readError.message : "Could not read that page.";
-        working = commit(markPageError(working, pageId, message));
+        working = await commit(markPageError(working, pageId, message));
         setError(message);
       }
     }
@@ -72,7 +72,7 @@ export function PagesManager({ id }: { id: string }) {
         working = appendPages(working, images, createId);
         pageIds = working.pages.filter((page) => !before.has(page.id)).map((page) => page.id);
       }
-      working = commit(working);
+      working = await commit(working);
       await readIds(working, pageIds);
     } finally {
       setBusy(false);

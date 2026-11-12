@@ -5,18 +5,38 @@ import { attentionCounts } from "@/lib/labels";
 import { buildDemoSet } from "@/lib/demo";
 import { saveSet } from "@/lib/db";
 import { orderedSteps } from "@/lib/editing";
-import { stepIndex } from "@/lib/player";
+import { emptyProgress, resumeLabel, stepIndex } from "@/lib/player";
+import { playableSteps, progressFor, savePlayerProgress } from "@/lib/sections";
 import { BenchLoading, Mark } from "./ui";
+import { usePlayers } from "./use-players";
 import { useAiMode, useSetList } from "./use-set";
 
 export function SetList() {
   const { sets, refresh, loading } = useSetList();
   const mode = useAiMode();
+  const { active } = usePlayers();
 
   async function loadSample() {
     await saveSet(buildDemoSet());
     await refresh();
   }
+
+  async function startOver(setId: string) {
+    if (!active || !sets) return;
+    const set = sets.find((item) => item.id === setId);
+    if (!set) return;
+    await saveSet({ ...savePlayerProgress(set, active.id, emptyProgress()), updatedAt: Date.now() });
+    await refresh();
+  }
+
+  const resume = sets && active
+    ? sets
+        .map((set) => ({
+          set,
+          label: resumeLabel(playableSteps(set, active.id), progressFor(set, active.id)),
+        }))
+        .find((item) => item.label)
+    : undefined;
 
   return (
     <main className="px-4 pb-16 pt-6">
@@ -49,6 +69,24 @@ export function SetList() {
           Try sample
         </button>
       </div>
+      <Link href="/join" data-testid="join-room" className="mt-3 block text-center text-sm font-semibold text-brick-dark">
+        Join a room with a code
+      </Link>
+      {resume?.label ? (
+        <div data-testid="resume-banner" className="mt-4 rounded-3xl bg-ink px-4 py-3 text-paper">
+          <Link href={`/sets/${resume.set.id}/play`} className="block font-display text-2xl">
+            {resume.label}
+          </Link>
+          <button
+            type="button"
+            data-testid="start-over"
+            className="mt-2 text-sm font-semibold text-stud"
+            onClick={() => void startOver(resume.set.id)}
+          >
+            Start over
+          </button>
+        </div>
+      ) : null}
       {loading || !sets ? (
         <BenchLoading label="Opening the bench" />
       ) : sets.length === 0 ? (
@@ -62,9 +100,12 @@ export function SetList() {
         <ul className="mt-6 space-y-3">
           {sets.map((set) => {
             const steps = orderedSteps(set.pages, set.steps);
+            const mine = active ? playableSteps(set, active.id) : steps;
+            const progressState = active ? progressFor(set, active.id) : emptyProgress();
             const attention = attentionCounts(set);
-            const progress = set.progress.currentStepId
-              ? `Step ${stepIndex(steps, set.progress.currentStepId) + 1} of ${steps.length}`
+            const label = active ? resumeLabel(mine, progressState) : null;
+            const progress = progressState.currentStepId
+              ? `Step ${stepIndex(mine, progressState.currentStepId) + 1} of ${mine.length}`
               : steps.length > 0
                 ? `${steps.length} steps ready`
                 : "No steps yet";
@@ -102,6 +143,11 @@ export function SetList() {
                     </span>
                   </span>
                 </Link>
+                {label ? (
+                  <Link href={`/sets/${set.id}/play`} data-testid="resume-card" className="mt-2 block px-3 pb-3 text-sm font-semibold text-brick-dark">
+                    {label}
+                  </Link>
+                ) : null}
               </li>
             );
           })}
