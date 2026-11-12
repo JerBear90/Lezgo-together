@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
+  --color-paper: #f6f0e6;
+  --color-ink: #221910;
+  --color-muted: #746656;
+  --color-line: #eadfce;
+  --color-card: #fffdf8;
+  --color-brick: #e23d2b;
+  --color-brick-dark: #9d2c1c;
+  --color-stud: #f0c445;
+  --color-pine: #1d6b48;
+  --color-desk: #e4d3bb;
+  --color-unsure: #8a5a00;
+  --color-unsure-bg: #fff4d4;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-desk);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+.desk {
+  min-height: 100dvh;
+  background-color: var(--color-desk);
+  background-image: radial-gradient(circle at 14px 14px, rgba(255, 255, 255, 0.45) 6px, transparent 7px);
+  background-size: 32px 32px;
+}
+
+.phone {
+  margin: 0 auto;
+  min-height: 100dvh;
+  width: min(100%, 440px);
+  background: var(--color-paper);
+  box-shadow: 0 0 0 1px rgba(34, 25, 16, 0.08), 0 24px 70px rgba(34, 25, 16, 0.16);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brick);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}
