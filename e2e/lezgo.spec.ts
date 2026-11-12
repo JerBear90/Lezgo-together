@@ -56,6 +56,7 @@ for (const viewport of [
     for (let step = 1; step <= 6; step += 1) {
       await expect(page.getByTestId("step-heading")).toHaveText(`Step ${step}`, { timeout: 15_000 });
       await expectStageUnderHeader(page);
+      await expectTopNavTapTargets(page);
       await expectFit(page, step === 2);
       await expectNoticeFullyVisible(page);
       await expectChipsVisible(page);
@@ -102,6 +103,34 @@ async function expectStageUnderHeader(page: Page) {
   expect(layout.parts.bottom).toBeLessThanOrEqual(layout.view.top + 2);
   expect(layout.view.left).toBeLessThan(24);
   expect(layout.view.right).toBeGreaterThan(layout.width - 24);
+}
+
+async function expectTopNavTapTargets(page: Page) {
+  const sizes = await page.evaluate(() => {
+    const measure = (selector: string) => {
+      const node = document.querySelector(selector);
+      if (!node) return null;
+      const box = node.getBoundingClientRect();
+      return { height: box.height, width: box.width };
+    };
+    return {
+      section: measure("[data-testid='section-chip']"),
+      step: measure("[data-testid='step-heading']"),
+      photo: measure("[data-testid='show-photo']"),
+      diagram: measure("[data-testid='show-diagram']"),
+      close: measure(".close-x"),
+      check: measure("[data-testid='part-check']"),
+    };
+  });
+  for (const key of ["section", "step", "close"] as const) {
+    const box = sizes[key];
+    if (!box) throw new Error(`The ${key} control is missing.`);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+  }
+  const toggle = sizes.photo ?? sizes.diagram;
+  if (!toggle) throw new Error("The photo/diagram control is missing.");
+  expect(toggle.height).toBeGreaterThanOrEqual(44);
+  if (sizes.check) expect(sizes.check.height).toBeGreaterThanOrEqual(28);
 }
 
 async function expectFit(page: Page, flat: boolean) {

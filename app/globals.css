@@ -197,14 +197,14 @@ body {
 
 .part-check {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  height: 22px;
-  width: 22px;
-  border-radius: 7px;
+  top: 4px;
+  right: 4px;
+  height: 28px;
+  width: 28px;
+  border-radius: 8px;
   border: 2px solid rgba(34, 25, 16, 0.25);
   background: #fff;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 800;
 }
 
@@ -229,7 +229,7 @@ body {
   display: flex;
   flex: 1;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
   margin: 0;
 }
@@ -248,28 +248,52 @@ body {
   background: var(--color-sun);
 }
 
+.stage-top .section-chip,
+.stage-top .section-chip-on,
+.stage-step,
+.stage-nav-btn {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .stage-step {
   margin-left: auto;
-  border-radius: 999px;
   background: #fff;
-  padding: 6px 10px;
-  font-size: 14px;
-  font-weight: 800;
-  white-space: nowrap;
+  box-shadow: 0 4px 0 var(--color-lip);
+}
+
+.stage-nav-btn {
+  flex: none;
+  box-shadow: 0 4px 0 var(--color-lip);
 }
 
 .close-x {
   display: inline-flex;
-  height: 44px;
-  width: 44px;
+  height: 48px;
+  width: 48px;
+  flex: none;
   align-items: center;
   justify-content: center;
   border-radius: 16px;
   background: #fff;
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 700;
   line-height: 1;
   box-shadow: 0 4px 0 var(--color-lip);
+}
+
+.stage-head .part-badge [data-testid="unsure-badge"] {
+  height: 28px;
+  width: 28px;
+  font-size: 15px;
 }
 
 .stage-view {
