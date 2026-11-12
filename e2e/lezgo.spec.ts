@@ -233,6 +233,14 @@ async function expectCalloutClear(page: Page) {
           bottom: (stage?.top ?? 0) + Number(diagram.getAttribute("data-model-bottom")),
         }
       : null;
+    const ghost = diagram?.hasAttribute("data-ghost-left")
+      ? {
+          left: (stage?.left ?? 0) + Number(diagram.getAttribute("data-ghost-left")),
+          top: (stage?.top ?? 0) + Number(diagram.getAttribute("data-ghost-top")),
+          right: (stage?.left ?? 0) + Number(diagram.getAttribute("data-ghost-right")),
+          bottom: (stage?.top ?? 0) + Number(diagram.getAttribute("data-ghost-bottom")),
+        }
+      : null;
     return {
       stage: rect(diagram),
       callout: rect(document.querySelector("[data-testid='ghost-part']")),
@@ -240,11 +248,23 @@ async function expectCalloutClear(page: Page) {
       back: rect(document.querySelector("[data-testid='step-back']")),
       next: rect(document.querySelector("[data-testid='step-next']")),
       model,
+      ghost,
     };
   });
   expect(layout.callout).toBeTruthy();
+  expect(layout.ghost).toBeTruthy();
+  expect(layout.model).toBeTruthy();
+  const ghostMidX = (layout.ghost!.left + layout.ghost!.right) / 2;
+  const ghostMidY = (layout.ghost!.top + layout.ghost!.bottom) / 2;
+  const modelMidX = (layout.model!.left + layout.model!.right) / 2;
+  const modelMidY = (layout.model!.top + layout.model!.bottom) / 2;
+  const modelWidth = layout.model!.right - layout.model!.left;
+  expect(ghostMidY).toBeGreaterThan(modelMidY);
+  expect(Math.abs(ghostMidX - modelMidX)).toBeLessThan(modelWidth * 0.35);
+  expect(layout.callout!.top).toBeGreaterThanOrEqual(layout.ghost!.bottom - 6);
   expect(inside(layout.callout!, layout.stage!, 2)).toBe(true);
   expect(overlaps(layout.callout!, layout.model!)).toBe(false);
+  expect(overlaps(layout.callout!, layout.ghost!)).toBe(false);
   expect(overlaps(layout.notes!, layout.back!)).toBe(false);
   expect(overlaps(layout.notes!, layout.next!)).toBe(false);
 }
