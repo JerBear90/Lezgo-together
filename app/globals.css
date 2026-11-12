@@ -141,7 +141,13 @@ body {
   gap: 4px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.72);
+  padding: 22px 8px 8px;
   box-shadow: 0 4px 0 rgba(255, 255, 255, 0.45);
+}
+
+.part-badge {
+  display: flex;
+  justify-content: center;
 }
 
 .part-tile-ghost {
@@ -170,8 +176,8 @@ body {
 
 .part-check {
   position: absolute;
+  top: 6px;
   right: 6px;
-  bottom: 6px;
   height: 22px;
   width: 22px;
   border-radius: 7px;
@@ -244,7 +250,7 @@ body {
 
 .stage-view {
   position: absolute;
-  inset: 64px 8px 196px 8px;
+  inset: 64px 12px 288px 12px;
 }
 
 .stage-ease {
@@ -264,20 +270,26 @@ body {
 .stage-caption {
   position: absolute;
   z-index: 20;
-  right: 12px;
-  bottom: 168px;
-  left: 12px;
-  max-height: 110px;
+  right: 16px;
+  bottom: 156px;
+  left: 16px;
+  max-height: 124px;
   overflow: auto;
-  font-size: 12px;
+  padding-top: 4px;
+  font-size: 13px;
   font-weight: 700;
+  line-height: 1.4;
+}
+
+.stage-caption p {
+  margin: 0;
 }
 
 .stage-note {
-  margin-top: 4px;
+  margin-top: 8px;
   border-radius: 12px;
   background: #fff1ec;
-  padding: 6px 8px;
+  padding: 10px 12px;
   color: var(--color-brick-dark);
 }
 
@@ -285,7 +297,7 @@ body {
 .stage-next {
   position: absolute;
   z-index: 30;
-  bottom: 92px;
+  bottom: 84px;
   display: inline-flex;
   min-height: 56px;
   min-width: 88px;

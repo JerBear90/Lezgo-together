@@ -170,7 +170,11 @@ export function StepPlayer({ id }: { id: string }) {
               >
                 {on ? "✓" : ""}
               </button>
-              {unsure || placeUnsure ? <UnsureBadge label={unsure ?? placeUnsure ?? "Unsure"} /> : null}
+              {unsure || placeUnsure ? (
+                <span className="part-badge">
+                  <UnsureBadge compact label={unsure ?? placeUnsure ?? "Unsure"} />
+                </span>
+              ) : null}
               {unsure ? <span className="sr-only text-unsure">{unsure}</span> : null}
             </div>
           );
@@ -226,7 +230,7 @@ export function StepPlayer({ id }: { id: string }) {
             </StepImage>
           ) : null}
         </div>
-        <div className="stage-caption">
+        <div className="stage-caption" data-testid="step-notes">
           {shownStep.parts.map((part) => {
             const studs = formatStudPlacement(part);
             const catalog = lookupPart(part.shape, part.size);

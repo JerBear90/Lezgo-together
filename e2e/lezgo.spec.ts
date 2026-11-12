@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { createSet, shot, uploadPages } from "./support";
 
 test("creates a set", async ({ page }, testInfo) => {
@@ -36,49 +36,109 @@ test("steps next and back and checks off parts", async ({ page }, testInfo) => {
 
 test("fits the step model inside the stage at phone pixel ratios", async ({ browser, baseURL }, testInfo) => {
   testInfo.skip(testInfo.project.name !== "phone", "phone viewport only");
-  for (const deviceScaleFactor of [2, 3]) {
-    const context = await browser.newContext({
-      viewport: { width: 390, height: 844 },
-      deviceScaleFactor,
-      isMobile: true,
-      hasTouch: true,
-      userAgent: testInfo.project.use.userAgent,
-    });
-    const page = await context.newPage();
-    await page.goto(`${baseURL}/`);
-    await page.getByTestId("load-sample").click();
-    await page.getByTestId("set-card").click();
-    await page.getByTestId("nav-play").click();
-    await page.getByTestId("step-next").click();
-    await expect(page.getByTestId("step-heading")).toHaveText("Step 2");
-    const diagram = page.getByTestId("step-diagram");
-    await expect(diagram).toHaveAttribute("data-fit-ready", "true");
-    const fit = await diagram.evaluate((el) => {
-      const stage = el.getBoundingClientRect();
-      const canvas = el.querySelector("canvas")?.getBoundingClientRect();
-      return {
-        stageW: stage.width,
-        stageH: stage.height,
-        canvasW: canvas?.width ?? 0,
-        canvasH: canvas?.height ?? 0,
-        left: Number(el.getAttribute("data-fit-left")),
-        top: Number(el.getAttribute("data-fit-top")),
-        right: Number(el.getAttribute("data-fit-right")),
-        bottom: Number(el.getAttribute("data-fit-bottom")),
-      };
-    });
-    expect(fit.canvasW).toBeGreaterThan(50);
-    expect(Math.abs(fit.canvasW - fit.stageW)).toBeLessThan(2);
-    expect(Math.abs(fit.canvasH - fit.stageH)).toBeLessThan(2);
-    const margin = 6;
-    expect(fit.left).toBeGreaterThanOrEqual(margin);
-    expect(fit.top).toBeGreaterThanOrEqual(margin);
-    expect(fit.right).toBeLessThanOrEqual(fit.stageW - margin);
-    expect(fit.bottom).toBeLessThanOrEqual(fit.stageH - margin);
-    expect(fit.right - fit.left).toBeGreaterThan(fit.stageW * 0.35);
-    await context.close();
+  const phones = [
+    { width: 360, height: 740 },
+    { width: 390, height: 844 },
+    { width: 430, height: 932 },
+  ];
+  for (const viewport of phones) {
+    for (const deviceScaleFactor of [2, 3]) {
+      const context = await browser.newContext({
+        viewport,
+        deviceScaleFactor,
+        isMobile: true,
+        hasTouch: true,
+        userAgent: testInfo.project.use.userAgent,
+      });
+      const page = await context.newPage();
+      await page.goto(`${baseURL}/`);
+      await page.getByTestId("load-sample").click();
+      await page.getByTestId("set-card").click();
+      await page.getByTestId("nav-play").click();
+      await page.getByTestId("step-next").click();
+      await expect(page.getByTestId("step-heading")).toHaveText("Step 2");
+      await expectFit(page);
+      for (let step = 0; step < 3; step += 1) await page.getByTestId("step-next").click();
+      await expect(page.getByTestId("step-heading")).toHaveText("Step 5");
+      await expectFit(page);
+      const layout = await page.evaluate(() => {
+        const rect = (node: Element | null) => {
+          if (!node) return null;
+          const box = node.getBoundingClientRect();
+          return { left: box.left, top: box.top, right: box.right, bottom: box.bottom };
+        };
+        const diagram = document.querySelector("[data-testid='step-diagram']");
+        const stage = diagram?.getBoundingClientRect();
+        const model = diagram
+          ? {
+              left: (stage?.left ?? 0) + Number(diagram.getAttribute("data-model-left")),
+              top: (stage?.top ?? 0) + Number(diagram.getAttribute("data-model-top")),
+              right: (stage?.left ?? 0) + Number(diagram.getAttribute("data-model-right")),
+              bottom: (stage?.top ?? 0) + Number(diagram.getAttribute("data-model-bottom")),
+            }
+          : null;
+        return {
+          stage: rect(diagram),
+          callout: rect(document.querySelector("[data-testid='ghost-part']")),
+          notes: rect(document.querySelector("[data-testid='step-notes']")),
+          back: rect(document.querySelector("[data-testid='step-back']")),
+          next: rect(document.querySelector("[data-testid='step-next']")),
+          model,
+        };
+      });
+      expect(layout.callout).toBeTruthy();
+      expect(inside(layout.callout!, layout.stage!, 4)).toBe(true);
+      expect(overlaps(layout.callout!, layout.model!)).toBe(false);
+      expect(overlaps(layout.notes!, layout.back!)).toBe(false);
+      expect(overlaps(layout.notes!, layout.next!)).toBe(false);
+      expect(layout.notes!.bottom).toBeLessThanOrEqual(layout.back!.top - 8);
+      await context.close();
+    }
   }
 });
+
+function overlaps(
+  a: { left: number; top: number; right: number; bottom: number },
+  b: { left: number; top: number; right: number; bottom: number },
+) {
+  return a.left < b.right - 2 && a.right > b.left + 2 && a.top < b.bottom - 2 && a.bottom > b.top + 2;
+}
+
+function inside(
+  inner: { left: number; top: number; right: number; bottom: number },
+  outer: { left: number; top: number; right: number; bottom: number },
+  pad: number,
+) {
+  return inner.left >= outer.left + pad && inner.top >= outer.top + pad && inner.right <= outer.right - pad && inner.bottom <= outer.bottom - pad;
+}
+
+async function expectFit(page: Page) {
+  const diagram = page.getByTestId("step-diagram");
+  await expect(diagram).toHaveAttribute("data-fit-ready", "true");
+  const fit = await diagram.evaluate((el) => {
+    const stage = el.getBoundingClientRect();
+    const canvas = el.querySelector("canvas")?.getBoundingClientRect();
+    return {
+      stageW: stage.width,
+      stageH: stage.height,
+      canvasW: canvas?.width ?? 0,
+      canvasH: canvas?.height ?? 0,
+      left: Number(el.getAttribute("data-fit-left")),
+      top: Number(el.getAttribute("data-fit-top")),
+      right: Number(el.getAttribute("data-fit-right")),
+      bottom: Number(el.getAttribute("data-fit-bottom")),
+    };
+  });
+  expect(Math.abs(fit.canvasW - fit.stageW)).toBeLessThan(2);
+  expect(Math.abs(fit.canvasH - fit.stageH)).toBeLessThan(2);
+  const margin = 4;
+  expect(fit.left).toBeGreaterThanOrEqual(margin);
+  expect(fit.top).toBeGreaterThanOrEqual(margin);
+  expect(fit.right).toBeLessThanOrEqual(fit.stageW - margin);
+  expect(fit.bottom).toBeLessThanOrEqual(fit.stageH - margin);
+  const fill = Math.max((fit.right - fit.left) / fit.stageW, (fit.bottom - fit.top) / fit.stageH);
+  expect(fill).toBeGreaterThanOrEqual(0.55);
+}
 
 test("draws a black part as readable charcoal", async ({ page }) => {
   await page.goto("/");
