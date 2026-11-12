@@ -65,6 +65,9 @@ export function StepDiagram({
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true });
         renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         renderer.setClearColor(0xf6f0e6, 1);
+        renderer.domElement.style.width = "100%";
+        renderer.domElement.style.height = "100%";
+        renderer.domElement.style.display = "block";
         mount.appendChild(renderer.domElement);
 
         const world = new THREE.Scene();
@@ -159,14 +162,68 @@ export function StepDiagram({
           }
         }
 
-        function frameCamera() {
-          const aspect = Math.max(mount.clientWidth, 1) / Math.max(mount.clientHeight, 1);
-          const view = bounds.span * 0.72 * viewScale.current;
-          camera.left = -view * aspect;
-          camera.right = view * aspect;
-          camera.top = view;
-          camera.bottom = -view;
+        const corners = modelCorners(THREE, shown);
+
+        function applyFrustum(halfH: number) {
+          const width = Math.max(mount.clientWidth, 1);
+          const height = Math.max(mount.clientHeight, 1);
+          const aspect = width / height;
+          const halfW = halfH * aspect;
+          camera.zoom = 1;
+          camera.left = -halfW;
+          camera.right = halfW;
+          camera.top = halfH;
+          camera.bottom = -halfH;
           camera.updateProjectionMatrix();
+          camera.updateMatrixWorld(true);
+        }
+
+        function frameCamera() {
+          // Orthographic zoom is the frustum, not the camera distance. Fit the
+          // projected corners into the CSS-sized stage, leaving a margin.
+          let view = Math.max(bounds.span, 1);
+          const limit = 0.78;
+          for (let pass = 0; pass < 4; pass += 1) {
+            applyFrustum(view);
+            let maxAbs = 0;
+            for (const corner of corners) {
+              const projected = corner.clone().project(camera);
+              maxAbs = Math.max(maxAbs, Math.abs(projected.x), Math.abs(projected.y));
+            }
+            if (maxAbs < 0.001) break;
+            const next = view * (maxAbs / limit);
+            if (Math.abs(next - view) < 0.02) {
+              view = next;
+              break;
+            }
+            view = next;
+          }
+          applyFrustum(view * viewScale.current);
+          publishFit();
+        }
+
+        function publishFit() {
+          const width = mount.clientWidth;
+          const height = mount.clientHeight;
+          if (width < 2 || height < 2 || corners.length === 0) return;
+          let left = Infinity;
+          let top = Infinity;
+          let right = -Infinity;
+          let bottom = -Infinity;
+          for (const corner of corners) {
+            const projected = corner.clone().project(camera);
+            const x = (projected.x * 0.5 + 0.5) * width;
+            const y = (-projected.y * 0.5 + 0.5) * height;
+            left = Math.min(left, x);
+            right = Math.max(right, x);
+            top = Math.min(top, y);
+            bottom = Math.max(bottom, y);
+          }
+          panel.dataset.fitLeft = String(Math.round(left));
+          panel.dataset.fitTop = String(Math.round(top));
+          panel.dataset.fitRight = String(Math.round(right));
+          panel.dataset.fitBottom = String(Math.round(bottom));
+          panel.dataset.fitReady = "true";
         }
 
         function placeCamera() {
@@ -182,8 +239,9 @@ export function StepDiagram({
         }
 
         function resize() {
-          const width = Math.max(mount.clientWidth, 1);
-          const height = Math.max(mount.clientHeight, 1);
+          const width = mount.clientWidth;
+          const height = mount.clientHeight;
+          if (width < 2 || height < 2) return;
           renderer.setSize(width, height, false);
           frameCamera();
         }
@@ -408,6 +466,25 @@ function moveMarker(root: HTMLElement, key: string, left: number, top: number, t
     line.setAttribute("x2", String(left));
     line.setAttribute("y2", String(top));
   }
+}
+
+function modelCorners(THREE: typeof import("three"), bricks: ReturnType<typeof displayBricks>) {
+  const corners: import("three").Vector3[] = [];
+  for (const brick of bricks) {
+    const { w, d } = footprint(brick.size, brick.rotation ?? 0);
+    const height = plateLayers(brick.shape) * PLATE + 0.24;
+    const x0 = brick.displayX;
+    const z0 = brick.displayY;
+    const y0 = brick.displayLayer * PLATE;
+    for (const x of [x0, x0 + w]) {
+      for (const y of [y0, y0 + height]) {
+        for (const z of [z0, z0 + d]) {
+          corners.push(new THREE.Vector3(x, y, z));
+        }
+      }
+    }
+  }
+  return corners;
 }
 
 function sceneBounds(bricks: ReturnType<typeof displayBricks>) {
