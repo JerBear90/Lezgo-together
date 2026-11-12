@@ -53,7 +53,7 @@ export function JoinRoom() {
   return (
     <>
       <TopBar title="Join a room" backHref="/" backLabel="Sets" />
-      <form onSubmit={(event) => void onSubmit(event)} className="space-y-4 px-4 py-5">
+      <form onSubmit={(event) => void onSubmit(event)} className="together-lobby min-h-[70dvh] space-y-4 px-4 py-5 text-white">
         <label className="block text-sm font-semibold">
           Room code
           <input

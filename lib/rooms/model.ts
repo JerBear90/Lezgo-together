@@ -3,7 +3,7 @@ import type { BrickSet, PlayerProfile, SetProgress } from "../types";
 export const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
 export const DROP_AFTER_MS = 45_000;
 export const MAX_PLAYERS = 6;
-export const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+export const CODE_ALPHABET = "0123456789";
 
 export type RoomPlayer = {
   id: string;
@@ -39,7 +39,14 @@ export function normalizeCode(input: string): string {
   return input.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
-export function makeRoomCode(length = 5, random: () => number = Math.random): string {
+export function formatRoomCode(code: string): string {
+  const compact = code.replace(/\s/g, "");
+  if (compact.length < 4) return compact;
+  const mid = Math.ceil(compact.length / 2);
+  return `${compact.slice(0, mid)} ${compact.slice(mid)}`;
+}
+
+export function makeRoomCode(length = 6, random: () => number = Math.random): string {
   let code = "";
   for (let i = 0; i < length; i += 1) {
     code += CODE_ALPHABET[Math.floor(random() * CODE_ALPHABET.length)];

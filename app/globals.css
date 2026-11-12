@@ -49,6 +49,22 @@ body {
   outline-offset: 2px;
 }
 
+.together-lobby {
+  background: radial-gradient(circle at 50% 0%, #8d74ff, #6d4aff 42%, #3a27a5);
+}
+
+.btn-lip {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 0 #d5dbe3;
+}
+
+.btn-sun {
+  background: #ffe14a;
+  border-radius: 16px;
+  box-shadow: 0 4px 0 #e0b400;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     scroll-behavior: auto !important;
