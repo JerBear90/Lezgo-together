@@ -118,6 +118,7 @@ body {
   inset: 0;
   z-index: 40;
   display: flex;
+  flex-direction: column;
   box-sizing: border-box;
   height: 100dvh;
   max-height: 100%;
@@ -128,26 +129,40 @@ body {
   color: var(--color-ink);
 }
 
+.stage-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 8px 8px 0;
+}
+
 .stage-parts {
   display: flex;
-  width: 96px;
-  flex-direction: column;
+  flex: 0 1 auto;
+  flex-direction: row;
+  align-items: center;
   gap: 8px;
-  overflow-y: auto;
-  padding: 12px 8px 120px;
+  width: auto;
+  max-width: 42%;
+  overflow-x: auto;
+  padding: 0;
 }
 
 .part-tile {
   position: relative;
   display: flex;
-  min-height: 92px;
+  width: 76px;
+  min-height: 76px;
+  flex: none;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 2px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.72);
-  padding: 22px 8px 8px;
+  padding: 16px 6px 6px;
   box-shadow: 0 4px 0 rgba(255, 255, 255, 0.45);
 }
 
@@ -212,10 +227,11 @@ body {
   position: relative;
   z-index: 30;
   display: flex;
-  flex: none;
+  flex: 1;
   align-items: center;
   gap: 8px;
-  margin: 8px 8px 0;
+  min-width: 0;
+  margin: 0;
 }
 
 .section-chip,
@@ -351,7 +367,7 @@ body {
 
 @media (orientation: landscape) {
   .stage-parts {
-    width: 148px;
+    max-width: 50%;
   }
 }
 

@@ -55,6 +55,7 @@ for (const viewport of [
     await page.getByTestId("nav-play").click();
     for (let step = 1; step <= 6; step += 1) {
       await expect(page.getByTestId("step-heading")).toHaveText(`Step ${step}`, { timeout: 15_000 });
+      await expectStageUnderHeader(page);
       await expectFit(page, step === 2);
       await expectNoticeFullyVisible(page);
       await expectChipsVisible(page);
@@ -81,6 +82,23 @@ function inside(
   pad: number,
 ) {
   return inner.left >= outer.left + pad && inner.top >= outer.top + pad && inner.right <= outer.right - pad && inner.bottom <= outer.bottom - pad;
+}
+
+async function expectStageUnderHeader(page: Page) {
+  const layout = await page.evaluate(() => {
+    const box = (selector: string) => document.querySelector(selector)?.getBoundingClientRect() ?? null;
+    return {
+      head: box("[data-testid='stage-head']"),
+      view: box(".stage-view"),
+      parts: box(".stage-parts"),
+      width: window.innerWidth,
+    };
+  });
+  if (!layout.head || !layout.view || !layout.parts) throw new Error("The step header or stage is missing.");
+  expect(layout.view.top).toBeGreaterThanOrEqual(layout.head.bottom - 2);
+  expect(layout.parts.bottom).toBeLessThanOrEqual(layout.view.top + 2);
+  expect(layout.view.left).toBeLessThan(24);
+  expect(layout.view.right).toBeGreaterThan(layout.width - 24);
 }
 
 async function expectFit(page: Page, flat: boolean) {
