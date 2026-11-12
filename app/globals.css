@@ -195,19 +195,21 @@ body {
 
 .stage-main {
   position: relative;
+  display: flex;
   min-width: 0;
+  min-height: 0;
   flex: 1;
+  flex-direction: column;
 }
 
 .stage-top {
-  position: absolute;
+  position: relative;
   z-index: 30;
-  top: 10px;
-  right: 10px;
-  left: 10px;
   display: flex;
+  flex: none;
   align-items: center;
   gap: 8px;
+  margin: 8px 8px 0;
 }
 
 .section-chip,
@@ -249,8 +251,10 @@ body {
 }
 
 .stage-view {
-  position: absolute;
-  inset: 64px 12px 288px 12px;
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 180px;
+  margin: 8px 12px 4px;
 }
 
 .stage-ease {
@@ -268,14 +272,11 @@ body {
 }
 
 .stage-caption {
-  position: absolute;
+  position: relative;
   z-index: 20;
-  right: 16px;
-  bottom: 156px;
-  left: 16px;
-  max-height: 124px;
-  overflow: auto;
-  padding-top: 4px;
+  flex: none;
+  margin: 8px 16px 4px;
+  overflow: visible;
   font-size: 13px;
   font-weight: 700;
   line-height: 1.4;
@@ -293,11 +294,18 @@ body {
   color: var(--color-brick-dark);
 }
 
+.stage-actions {
+  display: flex;
+  flex: none;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px 0;
+}
+
 .stage-back,
 .stage-next {
-  position: absolute;
+  position: relative;
   z-index: 30;
-  bottom: 84px;
   display: inline-flex;
   min-height: 56px;
   min-width: 88px;
@@ -307,20 +315,18 @@ body {
   font-weight: 800;
 }
 
-.stage-back {
-  left: 12px;
-}
-
-.stage-next {
-  right: 12px;
-}
-
 .stage-slider {
-  position: absolute;
+  position: relative;
   z-index: 30;
-  right: 108px;
-  bottom: 8px;
-  left: 108px;
+  flex: none;
+  margin: 8px 12px 12px;
+}
+
+.stage-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
 }
 
 .stud-slider input {

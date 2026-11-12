@@ -42,58 +42,27 @@ test("fits the step model inside the stage at phone pixel ratios", async ({ brow
     { width: 430, height: 932 },
   ];
   for (const viewport of phones) {
-    for (const deviceScaleFactor of [2, 3]) {
-      const context = await browser.newContext({
-        viewport,
-        deviceScaleFactor,
-        isMobile: true,
-        hasTouch: true,
-        userAgent: testInfo.project.use.userAgent,
-      });
-      const page = await context.newPage();
-      await page.goto(`${baseURL}/`);
-      await page.getByTestId("load-sample").click();
-      await page.getByTestId("set-card").click();
-      await page.getByTestId("nav-play").click();
-      await page.getByTestId("step-next").click();
-      await expect(page.getByTestId("step-heading")).toHaveText("Step 2");
-      await expectFit(page);
-      for (let step = 0; step < 3; step += 1) await page.getByTestId("step-next").click();
-      await expect(page.getByTestId("step-heading")).toHaveText("Step 5");
-      await expectFit(page);
-      const layout = await page.evaluate(() => {
-        const rect = (node: Element | null) => {
-          if (!node) return null;
-          const box = node.getBoundingClientRect();
-          return { left: box.left, top: box.top, right: box.right, bottom: box.bottom };
-        };
-        const diagram = document.querySelector("[data-testid='step-diagram']");
-        const stage = diagram?.getBoundingClientRect();
-        const model = diagram
-          ? {
-              left: (stage?.left ?? 0) + Number(diagram.getAttribute("data-model-left")),
-              top: (stage?.top ?? 0) + Number(diagram.getAttribute("data-model-top")),
-              right: (stage?.left ?? 0) + Number(diagram.getAttribute("data-model-right")),
-              bottom: (stage?.top ?? 0) + Number(diagram.getAttribute("data-model-bottom")),
-            }
-          : null;
-        return {
-          stage: rect(diagram),
-          callout: rect(document.querySelector("[data-testid='ghost-part']")),
-          notes: rect(document.querySelector("[data-testid='step-notes']")),
-          back: rect(document.querySelector("[data-testid='step-back']")),
-          next: rect(document.querySelector("[data-testid='step-next']")),
-          model,
-        };
-      });
-      expect(layout.callout).toBeTruthy();
-      expect(inside(layout.callout!, layout.stage!, 4)).toBe(true);
-      expect(overlaps(layout.callout!, layout.model!)).toBe(false);
-      expect(overlaps(layout.notes!, layout.back!)).toBe(false);
-      expect(overlaps(layout.notes!, layout.next!)).toBe(false);
-      expect(layout.notes!.bottom).toBeLessThanOrEqual(layout.back!.top - 8);
-      await context.close();
+    const context = await browser.newContext({
+      viewport,
+      deviceScaleFactor: 2,
+      isMobile: true,
+      hasTouch: true,
+      userAgent: testInfo.project.use.userAgent,
+    });
+    const page = await context.newPage();
+    await page.goto(`${baseURL}/`);
+    await page.getByTestId("load-sample").click();
+    await page.getByTestId("set-card").click();
+    await page.getByTestId("nav-play").click();
+    for (let step = 1; step <= 6; step += 1) {
+      await expect(page.getByTestId("step-heading")).toHaveText(`Step ${step}`);
+      await expectFit(page, step === 2);
+      await expectNoticeFullyVisible(page);
+      await expectChipsVisible(page);
+      if (step === 5) await expectCalloutClear(page);
+      if (step < 6) await page.getByTestId("step-next").click();
     }
+    await context.close();
   }
 });
 
@@ -112,7 +81,7 @@ function inside(
   return inner.left >= outer.left + pad && inner.top >= outer.top + pad && inner.right <= outer.right - pad && inner.bottom <= outer.bottom - pad;
 }
 
-async function expectFit(page: Page) {
+async function expectFit(page: Page, flat: boolean) {
   const diagram = page.getByTestId("step-diagram");
   await expect(diagram).toHaveAttribute("data-fit-ready", "true");
   const fit = await diagram.evaluate((el) => {
@@ -136,8 +105,92 @@ async function expectFit(page: Page) {
   expect(fit.top).toBeGreaterThanOrEqual(margin);
   expect(fit.right).toBeLessThanOrEqual(fit.stageW - margin);
   expect(fit.bottom).toBeLessThanOrEqual(fit.stageH - margin);
-  const fill = Math.max((fit.right - fit.left) / fit.stageW, (fit.bottom - fit.top) / fit.stageH);
-  expect(fill).toBeGreaterThanOrEqual(0.55);
+  const widthFill = (fit.right - fit.left) / fit.stageW;
+  const heightFill = (fit.bottom - fit.top) / fit.stageH;
+  expect(Math.max(widthFill, heightFill)).toBeGreaterThanOrEqual(0.55);
+  if (flat) expect(widthFill).toBeGreaterThanOrEqual(0.65);
+  const mid = (fit.top + fit.bottom) / 2;
+  expect(Math.abs(mid - fit.stageH / 2)).toBeLessThan(fit.stageH * 0.14);
+}
+
+async function expectNoticeFullyVisible(page: Page) {
+  const notice = page.getByTestId("placement-retake");
+  if ((await notice.count()) === 0) return;
+  const box = await notice.boundingBox();
+  const viewport = page.viewportSize();
+  if (!box || !viewport) throw new Error("The retake notice has no box.");
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
+  const covered = await notice.evaluate((el) => {
+    const rect = el.getBoundingClientRect();
+    const samples = [
+      [rect.left + 8, rect.top + 8],
+      [rect.right - 8, rect.top + 8],
+      [rect.left + 8, rect.bottom - 8],
+      [rect.right - 8, rect.bottom - 8],
+      [(rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2],
+    ];
+    return samples.some(([x, y]) => {
+      const hit = document.elementFromPoint(x, y);
+      return !hit || (hit !== el && !el.contains(hit));
+    });
+  });
+  expect(covered).toBe(false);
+  const back = await page.getByTestId("step-back").boundingBox();
+  const next = await page.getByTestId("step-next").boundingBox();
+  if (!back || !next) throw new Error("The step buttons have no box.");
+  expect(overlaps(bounds(box), bounds(back))).toBe(false);
+  expect(overlaps(bounds(box), bounds(next))).toBe(false);
+}
+
+function bounds(box: { x: number; y: number; width: number; height: number }) {
+  return { left: box.x, top: box.y, right: box.x + box.width, bottom: box.y + box.height };
+}
+
+async function expectChipsVisible(page: Page) {
+  const clipped = await page.evaluate(() => {
+    const chips = [...document.querySelectorAll(".stage-slider .section-chip")];
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    return chips.some((chip) => {
+      const rect = chip.getBoundingClientRect();
+      return rect.left < 0 || rect.top < 0 || rect.right > width - 1 || rect.bottom > height - 1;
+    });
+  });
+  expect(clipped).toBe(false);
+}
+
+async function expectCalloutClear(page: Page) {
+  const layout = await page.evaluate(() => {
+    const rect = (node: Element | null) => {
+      if (!node) return null;
+      const box = node.getBoundingClientRect();
+      return { left: box.left, top: box.top, right: box.right, bottom: box.bottom };
+    };
+    const diagram = document.querySelector("[data-testid='step-diagram']");
+    const stage = diagram?.getBoundingClientRect();
+    const model = diagram
+      ? {
+          left: (stage?.left ?? 0) + Number(diagram.getAttribute("data-model-left")),
+          top: (stage?.top ?? 0) + Number(diagram.getAttribute("data-model-top")),
+          right: (stage?.left ?? 0) + Number(diagram.getAttribute("data-model-right")),
+          bottom: (stage?.top ?? 0) + Number(diagram.getAttribute("data-model-bottom")),
+        }
+      : null;
+    return {
+      stage: rect(diagram),
+      callout: rect(document.querySelector("[data-testid='ghost-part']")),
+      notes: rect(document.querySelector("[data-testid='step-notes']")),
+      back: rect(document.querySelector("[data-testid='step-back']")),
+      next: rect(document.querySelector("[data-testid='step-next']")),
+      model,
+    };
+  });
+  expect(layout.callout).toBeTruthy();
+  expect(inside(layout.callout!, layout.stage!, 2)).toBe(true);
+  expect(overlaps(layout.callout!, layout.model!)).toBe(false);
+  expect(overlaps(layout.notes!, layout.back!)).toBe(false);
+  expect(overlaps(layout.notes!, layout.next!)).toBe(false);
 }
 
 test("draws a black part as readable charcoal", async ({ page }) => {

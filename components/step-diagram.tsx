@@ -164,6 +164,28 @@ export function StepDiagram({
 
         const corners = modelCorners(THREE, shown);
         const solidCorners = modelCorners(THREE, shown.filter((brick) => brick.confident));
+        const stageEl = mount.closest(".stage-view") as HTMLElement | null;
+
+        function sizeStage(extX: number, extY: number) {
+          const stage = stageEl;
+          const column = stage?.parentElement;
+          if (!stage || !column) return;
+          const ratio = extY / Math.max(extX, 0.2);
+          const width = Math.max(stage.clientWidth, 160);
+          const callout = shown.some((brick) => !brick.confident) ? 92 : 0;
+          const wanted = Math.round(Math.max(200, width * ratio * 1.05 + 64 + callout));
+          const used = [...column.children].reduce((sum, child) => {
+            if (child === stage) return sum;
+            return sum + (child as HTMLElement).offsetHeight;
+          }, 0);
+          const available = column.clientHeight - used - 8;
+          if (available < 140) return;
+          const height = Math.min(wanted, available);
+          if (Math.abs(stage.offsetHeight - height) > 2) {
+            stage.style.flex = "0 0 auto";
+            stage.style.height = `${height}px`;
+          }
+        }
 
         function frameCamera() {
           // Fit the projected model, including ghosts, to about 76% of the stage
@@ -181,15 +203,17 @@ export function StepDiagram({
             minY = Math.min(minY, viewed.y);
             maxY = Math.max(maxY, viewed.y);
           }
-          const width = Math.max(mount.clientWidth, 1);
-          const height = Math.max(mount.clientHeight, 1);
-          const aspect = width / height;
-          const fill = 0.76;
           const cx = Number.isFinite(minX) ? (minX + maxX) / 2 : 0;
           const cy = Number.isFinite(minY) ? (minY + maxY) / 2 : 0;
           const extX = Math.max(Number.isFinite(minX) ? (maxX - minX) / 2 : 1, 0.45);
           const extY = Math.max(Number.isFinite(minY) ? (maxY - minY) / 2 : 1, 0.45);
-          const halfH = Math.max(extY / fill, extX / (fill * aspect)) * viewScale.current;
+          sizeStage(extX, extY);
+          const width = Math.max(mount.clientWidth, 1);
+          const height = Math.max(mount.clientHeight, 1);
+          const aspect = width / height;
+          // Flat models fill about 72% of the stage width. A taller build may
+          // use more of the height, and never spills past 82% of it.
+          const halfH = Math.max(extY / 0.82, extX / (0.72 * aspect)) * viewScale.current;
           const halfW = halfH * aspect;
           camera.zoom = 1;
           camera.left = cx - halfW;
@@ -324,6 +348,10 @@ export function StepDiagram({
         };
 
         cleanup = () => {
+          if (stageEl) {
+            stageEl.style.height = "";
+            stageEl.style.flex = "";
+          }
           window.cancelAnimationFrame(frame);
           renderer.domElement.removeEventListener("pointerup", onDoubleTap);
           observer.disconnect();
@@ -487,7 +515,7 @@ function placeCallout(root: HTMLElement, key: string, ghostX: number, ghostY: nu
     right: Number(root.dataset.modelRight ?? root.dataset.fitRight ?? stageW),
     bottom: Number(root.dataset.modelBottom ?? root.dataset.fitBottom ?? stageH),
   };
-  const gap = 10;
+  const gap = 16;
   const candidates = [
     { x: ghostX - boxW / 2, y: model.bottom + gap },
     { x: ghostX - boxW / 2, y: model.top - boxH - gap },
