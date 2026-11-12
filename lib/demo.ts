@@ -1,4 +1,4 @@
-import type { BrickSet, BuildStep, InstructionPage, Part, Region } from "./types";
+import type { BrickSet, BuildStep, InstructionPage, Part, PartPlacement, Region } from "./types";
 import { emptyProgress } from "./player";
 
 export const DEMO_SET_ID = "demo-harbor-tug";
@@ -64,16 +64,46 @@ export function buildDemoSet(now = Date.now()): BrickSet {
 
   const steps: BuildStep[] = [
     step("demo-step-1", "demo-page-1", 1, 0, 3, "Lay two red 2x4 bricks side by side. This is the bottom of the hull.", [
-      piece("demo-step-1-p1", "Red", "brick", "2x4", 2),
+      piece("demo-step-1-p1", "Red", "brick", "2x4", 2, known({
+        along: 3,
+        row: 2,
+        point: [0.36, 0.4],
+        callout: [0.8, 0.2],
+        poses: [[3, 1, 0, 0], [5, 1, 0, 0]],
+      })),
     ]),
     step("demo-step-2", "demo-page-1", 2, 1, 3, "Press a black 2x4 plate onto each end of the hull.", [
-      piece("demo-step-2-p1", "Black", "plate", "2x4", 2),
+      piece("demo-step-2-p1", "Black", "plate", "2x4", 2, known({
+        along: 3,
+        row: 2,
+        onto: "red 2x4",
+        relation: "on top of",
+        point: [0.4, 0.58],
+        callout: [0.78, 0.22],
+        poses: [[3, 1, 3, 0], [5, 1, 3, 0]],
+      })),
     ]),
     step("demo-step-3", "demo-page-1", 3, 2, 3, "Stack four yellow 1x2 bricks in the middle for the cabin base.", [
-      piece("demo-step-3-p1", "Yellow", "brick", "1x2", 4),
+      piece("demo-step-3-p1", "Yellow", "brick", "1x2", 4, known({
+        along: 4,
+        row: 3,
+        onto: "black 2x4",
+        relation: "on top of",
+        point: [0.48, 0.5],
+        callout: [0.76, 0.2],
+        poses: [[4, 2, 4, 0], [5, 2, 4, 0], [4, 2, 7, 0], [5, 2, 7, 0]],
+      })),
     ]),
     step("demo-step-4", "demo-page-2", 4, 0, 3, "Build the cabin walls with white 1x4 bricks, leaving the front open.", [
-      piece("demo-step-4-p1", "White", "brick", "1x4", 4),
+      piece("demo-step-4-p1", "White", "brick", "1x4", 4, known({
+        along: 3,
+        row: 2,
+        onto: "yellow 1x2",
+        relation: "on top of",
+        point: [0.36, 0.46],
+        callout: [0.78, 0.22],
+        poses: [[3, 1, 10, 0], [6, 1, 10, 0], [3, 4, 10, 90], [3, 4, 13, 90]],
+      })),
     ]),
     step(
       "demo-step-5",
@@ -92,21 +122,72 @@ export function buildDemoSet(now = Date.now()): BrickSet {
           certainty: "uncertain",
           uncertainFields: ["color"],
           uncertaintyNote: "The ink is pale, so the color may be blue or light gray.",
+          placement: {
+            point: null,
+            callout: null,
+            studs: { along: null, fromEdge: null, row: null, onto: null, relation: null },
+            poses: [{ x: null, y: null, layer: null, rotation: null }],
+            certainty: "uncertain",
+            uncertainFields: ["point", "studs", "orientation", "layer"],
+            note: "can't count studs, photo angle",
+            needsRetake: true,
+            corrected: false,
+          },
         },
       ],
       "uncertain",
       "Can't tell whether these face the bow or the stern.",
     ),
     step("demo-step-6", "demo-page-2", 6, 2, 3, "Cap the cabin with one red 4x6 plate.", [
-      piece("demo-step-6-p1", "Red", "plate", "4x6", 1),
+      piece("demo-step-6-p1", "Red", "plate", "4x6", 1, known({
+        along: 3,
+        row: 1,
+        onto: "white 1x4",
+        relation: "on top of",
+        point: [0.46, 0.42],
+        callout: [0.78, 0.24],
+        poses: [[3, 0, 16, 0]],
+      })),
     ]),
     step("demo-step-7", "demo-page-3", 7, 0, 2, "Stack a black 2x2 brick and a red round brick as the funnel.", [
-      piece("demo-step-7-p1", "Black", "brick", "2x2", 1),
-      piece("demo-step-7-p2", "Red", "round", "2x2", 1),
+      piece("demo-step-7-p1", "Black", "brick", "2x2", 1, known({
+        along: 4,
+        row: 3,
+        onto: "red 4x6",
+        relation: "on top of",
+        point: [0.46, 0.48],
+        callout: [0.74, 0.22],
+        poses: [[4, 2, 17, 0]],
+      })),
+      piece("demo-step-7-p2", "Red", "round", "2x2", 1, known({
+        along: 4,
+        row: 3,
+        onto: "black 2x2",
+        relation: "on top of",
+        point: [0.46, 0.34],
+        callout: [0.74, 0.18],
+        poses: [[4, 2, 20, 0]],
+      })),
     ]),
     step("demo-step-8", "demo-page-3", 8, 1, 2, "Add a yellow 1x1 tile at the stern and a white 1x2 slope as the flag.", [
-      piece("demo-step-8-p1", "Yellow", "tile", "1x1", 1),
-      piece("demo-step-8-p2", "White", "slope", "1x2", 1),
+      piece("demo-step-8-p1", "Yellow", "tile", "1x1", 1, known({
+        along: 3,
+        row: 2,
+        onto: "red 4x6",
+        relation: "on top of",
+        point: [0.32, 0.62],
+        callout: [0.72, 0.28],
+        poses: [[3, 1, 17, 0]],
+      })),
+      piece("demo-step-8-p2", "White", "slope", "1x2", 1, known({
+        along: 6,
+        row: 2,
+        onto: "red 4x6",
+        relation: "on top of",
+        point: [0.62, 0.58],
+        callout: [0.8, 0.24],
+        poses: [[6, 1, 17, 0]],
+      })),
     ]),
   ];
 
@@ -146,7 +227,14 @@ function step(
   };
 }
 
-function piece(id: string, color: string, shape: string, size: string, quantity: number): Part {
+function piece(
+  id: string,
+  color: string,
+  shape: string,
+  size: string,
+  quantity: number,
+  placement: PartPlacement,
+): Part {
   return {
     id,
     color,
@@ -156,6 +244,35 @@ function piece(id: string, color: string, shape: string, size: string, quantity:
     certainty: "certain",
     uncertainFields: [],
     uncertaintyNote: null,
+    placement,
+  };
+}
+
+function known(options: {
+  along: number;
+  row: number;
+  onto?: string;
+  relation?: string;
+  point: [number, number];
+  callout: [number, number];
+  poses: Array<[number, number, number, number]>;
+}): PartPlacement {
+  return {
+    point: { x: options.point[0], y: options.point[1] },
+    callout: { x: options.callout[0], y: options.callout[1] },
+    studs: {
+      along: options.along,
+      fromEdge: "left edge",
+      row: options.row,
+      onto: options.onto ?? null,
+      relation: options.relation ?? null,
+    },
+    poses: options.poses.map(([x, y, layer, rotation]) => ({ x, y, layer, rotation })),
+    certainty: "certain",
+    uncertainFields: [],
+    note: null,
+    needsRetake: false,
+    corrected: false,
   };
 }
 

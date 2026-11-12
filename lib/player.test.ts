@@ -14,6 +14,7 @@ import {
   swipeDirection,
   togglePart,
 } from "./player";
+import { unknownPlacement } from "./placement";
 import type { BrickSet, BuildStep, Part } from "./types";
 
 function part(id: string, overrides: Partial<Part> = {}): Part {
@@ -26,6 +27,7 @@ function part(id: string, overrides: Partial<Part> = {}): Part {
     certainty: "certain",
     uncertainFields: [],
     uncertaintyNote: null,
+    placement: unknownPlacement(),
     ...overrides,
   };
 }

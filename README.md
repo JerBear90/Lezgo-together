@@ -15,7 +15,9 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-With no API key, Lezgo runs in **demo mode**. Page readings are labeled sample data, and the Harbor Tug sample (Try sample) is a full build with an unsure part and a page that asks for a retake. Demo mode is enough to click through the whole app.
+With no API key, Lezgo runs in **demo mode**. Page readings are labeled sample data, and the Harbor Tug sample (Try sample) is a full build with an unsure part and a page that asks for a retake. Demo mode is enough to click through the whole app. The sample also draws a reconstructed diagram, with stud arrows, without a key.
+
+Each step is rebuilt from the parts found on the page. Known bricks get a standard part number (the same numbers LDraw and BrickLink use) and a stud position. The step view draws those bricks with studs, highlights the new ones, and points an arrow at them. Anything uncertain is a ghost with an Unsure badge, not a guessed brick. Photo is one tap away. Drag an arrow or use the stud +/− buttons to correct a placement; the change is saved on this device. No extra service is required for the diagram.
 
 ## Vision model
 
@@ -27,7 +29,7 @@ Live readings use the [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) th
 | `AI_GATEWAY_MODEL` | No | Model id with image input and structured output. Default: `google/gemini-3.5-flash-lite`. |
 | `VERCEL_OIDC_TOKEN` | No | Set by Vercel on deployments. Do not put a secret in git. |
 
-The model is told to prefer **uncertain** over guessing. Each part carries a certainty flag and the fields that could not be read (color, shape, size, quantity). Each step carries a placement certainty. If a photo is too blurry, dark, cropped, angled, or low-resolution, the page comes back with a retake flag and a short reason, and the page offers a one-tap retake.
+The model is told to prefer **uncertain** over guessing. Each part carries a certainty flag and the fields that could not be read (color, shape, size, quantity), plus a stud offset and a pose on the build. If a stud count or a spot is not clear, that number stays empty. If a photo is too blurry, dark, cropped, angled, or low-resolution, the page comes back with a retake flag and a short reason, and the page offers a one-tap retake.
 
 ## Scripts
 
