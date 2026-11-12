@@ -5,7 +5,7 @@ import type { OrbitControls as OrbitControlsType } from "three/examples/jsm/cont
 import { buildScene } from "@/lib/build-model";
 import { footprint, plateLayers } from "@/lib/catalog";
 import { displayBricks, layoutScene } from "@/lib/iso";
-import { colorHex } from "@/lib/parts";
+import { brickPaint } from "@/lib/parts";
 import type { BuildStep } from "@/lib/types";
 import { UnsureBadge } from "./ui";
 
@@ -80,21 +80,43 @@ export function StepDiagram({
         controls.screenSpacePanning = true;
         controlsRef.current = controls;
 
-        world.add(new THREE.AmbientLight(0xffffff, 0.85));
-        const sun = new THREE.DirectionalLight(0xffffff, 1.15);
+        world.add(new THREE.AmbientLight(0xffffff, 0.9));
+        const sun = new THREE.DirectionalLight(0xffffff, 1.05);
         sun.position.set(6, 10, 4);
         world.add(sun);
+        const rimLight = new THREE.DirectionalLight(0xf4f7fb, 0.45);
+        rimLight.position.set(-7, 3, -6);
+        world.add(rimLight);
+
+        const hasDark = shown.some((brick) => brick.confident && brickPaint(brick.color).dark);
+        renderer.setClearColor(hasDark ? 0xf4f8fc : 0xf6f0e6, 1);
+        panel.style.background = hasDark ? "#f4f8fc" : "#f6f0e6";
 
         const studGeo = new THREE.CylinderGeometry(0.28, 0.28, 0.16, 16);
         for (const brick of shown) {
           const { w, d } = footprint(brick.size, brick.rotation ?? 0);
           const layers = plateLayers(brick.shape);
           const height = layers * PLATE;
-          const color = new THREE.Color(brick.confident ? colorHex(brick.color) ?? "#c4b8a8" : "#c8b79a");
-          if (brick.confident && !brick.isNew) color.multiplyScalar(0.62);
+          const paint = brickPaint(brick.color);
+          const faded = brick.confident && !brick.isNew;
+          const bodyColor = new THREE.Color(brick.confident ? paint.fill : "#c8b79a");
+          const studColor = new THREE.Color(paint.stud);
+          if (faded) {
+            bodyColor.multiplyScalar(paint.dark ? 0.88 : 0.62);
+            studColor.multiplyScalar(paint.dark ? 0.9 : 0.62);
+          }
+          const emissive = new THREE.Color(0x000000);
+          if (brick.confident && paint.dark) emissive.copy(bodyColor).multiplyScalar(0.22);
+          if (brick.isNew && brick.confident) emissive.add(bodyColor.clone().multiplyScalar(0.18));
           const material = brick.confident
-            ? new THREE.MeshLambertMaterial({ color, emissive: brick.isNew ? color.clone().multiplyScalar(0.18) : 0x000000 })
-            : new THREE.MeshBasicMaterial({ color: 0x8a5a00, wireframe: true });
+            ? new THREE.MeshLambertMaterial({ color: bodyColor, emissive })
+            : new THREE.MeshBasicMaterial({ color: 0xc4922a, wireframe: true });
+          const studMaterial = brick.confident
+            ? new THREE.MeshLambertMaterial({
+                color: studColor,
+                emissive: paint.dark ? studColor.clone().multiplyScalar(0.28) : 0x000000,
+              })
+            : material;
           const bodyWidth = brick.confident ? w * 0.96 : Math.max(w, 2.4);
           const bodyDepth = brick.confident ? d * 0.96 : Math.max(d, 2.4);
           const body = brick.shape === "round"
@@ -109,7 +131,7 @@ export function StepDiagram({
           if (brick.confident && brick.shape !== "tile" && brick.shape !== "slope" && brick.shape !== "round") {
             for (let ix = 0; ix < w; ix += 1) {
               for (let iy = 0; iy < d; iy += 1) {
-                const stud = new THREE.Mesh(studGeo, material);
+                const stud = new THREE.Mesh(studGeo, studMaterial);
                 stud.position.set(
                   brick.displayX + ix + 0.5,
                   brick.displayLayer * PLATE + height + 0.08,
@@ -118,6 +140,14 @@ export function StepDiagram({
                 world.add(stud);
               }
             }
+          }
+          if (brick.confident && paint.dark) {
+            const rim = new THREE.LineSegments(
+              new THREE.EdgesGeometry(body.geometry),
+              new THREE.LineBasicMaterial({ color: paint.edge }),
+            );
+            rim.position.copy(body.position);
+            world.add(rim);
           }
           if (brick.confident && brick.isNew) {
             const edges = new THREE.LineSegments(

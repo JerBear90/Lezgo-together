@@ -6,7 +6,7 @@ import { lookupPart } from "@/lib/catalog";
 import { updatePartPlacement } from "@/lib/editing";
 import { placementLabel, retakeMessage, uncertaintyLabel } from "@/lib/labels";
 import { canDrawPhotoArrow, formatStudPlacement, nudgeStud, placementUncertaintyLabel, shiftPose } from "@/lib/placement";
-import { quantityLabel } from "@/lib/parts";
+import { brickPaint, quantityLabel } from "@/lib/parts";
 import {
   applySwipe,
   checkedIds,
@@ -333,12 +333,16 @@ export function StepPlayer({ id }: { id: string }) {
 }
 
 function PartGlyph({ color }: { color: string }) {
-  const tone = color.toLowerCase();
-  const fill =
-    tone === "red" ? "#e23d2b" : tone === "black" ? "#241910" : tone === "yellow" ? "#ffe14a" : tone === "white" ? "#fff" : "#d9cbb6";
+  const paint = brickPaint(color);
+  const stud = paint.dark ? { background: paint.stud } : undefined;
   return (
-    <span className="part-glyph" style={{ background: fill }} aria-hidden="true">
-      <i /><i /><i /><i />
+    <span
+      className="part-glyph"
+      data-dark={paint.dark ? "true" : undefined}
+      style={{ background: paint.fill, boxShadow: paint.dark ? `inset 0 0 0 1.5px ${paint.edge}` : undefined }}
+      aria-hidden="true"
+    >
+      <i style={stud} /><i style={stud} /><i style={stud} /><i style={stud} />
     </span>
   );
 }

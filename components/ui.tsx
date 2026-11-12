@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { colorHex } from "@/lib/parts";
+import { brickPaint, colorHex } from "@/lib/parts";
 
 export function Mark({ size = 28 }: { size?: number }) {
   return (
@@ -51,11 +51,12 @@ export function ColorDot({ color }: { color: string }) {
       />
     );
   }
+  const paint = brickPaint(color);
   return (
     <span
       aria-hidden="true"
-      className="inline-block h-4 w-4 rounded-full border border-ink/20"
-      style={{ background: hex }}
+      className="inline-block h-4 w-4 rounded-full border border-ink/15"
+      style={{ background: paint.fill, boxShadow: paint.dark ? `inset 0 0 0 1.5px ${paint.edge}` : undefined }}
     />
   );
 }

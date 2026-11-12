@@ -34,6 +34,21 @@ test("steps next and back and checks off parts", async ({ page }, testInfo) => {
   await shot(page, testInfo, "step-player");
 });
 
+test("draws a black part as readable charcoal", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTestId("load-sample").click();
+  await page.getByTestId("set-card").click();
+  await page.getByTestId("nav-play").click();
+  await page.getByTestId("step-next").click();
+  await expect(page.getByTestId("step-heading")).toHaveText("Step 2");
+  const glyph = page.locator(".part-glyph").first();
+  await expect(glyph).toHaveAttribute("data-dark", "true");
+  await expect(glyph).toHaveCSS("background-color", "rgb(58, 58, 58)");
+  await page.getByTestId("step-slider").fill("4");
+  await expect(page.getByTestId("step-heading")).toHaveText("Preview 5");
+  await expect(page.getByTestId("ghost-part")).toBeVisible();
+});
+
 test("shows an unsure icon on uncertain parts", async ({ page }, testInfo) => {
   await createSet(page);
   await uploadPages(page);
