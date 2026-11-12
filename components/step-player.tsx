@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { lookupPart } from "@/lib/catalog";
-import { orderedSteps, updatePartPlacement } from "@/lib/editing";
+import { updatePartPlacement } from "@/lib/editing";
 import { placementLabel, retakeMessage, uncertaintyLabel } from "@/lib/labels";
 import { canDrawPhotoArrow, formatStudPlacement, nudgeStud, placementUncertaintyLabel, shiftPose } from "@/lib/placement";
 import { quantityLabel } from "@/lib/parts";
@@ -16,8 +16,10 @@ import {
   stepIndex,
   togglePart,
 } from "@/lib/player";
-import { sectionAt, sectionSpans } from "@/lib/sections";
+import { playableSteps, progressFor, savePlayerProgress, sectionAt, sectionSpans } from "@/lib/sections";
 import { BenchLoading, UnsureBadge } from "./ui";
+import { RoomSync } from "./room-sync";
+import { usePlayers } from "./use-players";
 import { useBrickSet } from "./use-set";
 import { StepDiagram } from "./step-diagram";
 import { StepImage } from "./step-view";
@@ -25,6 +27,7 @@ import type { Part } from "@/lib/types";
 
 export function StepPlayer({ id }: { id: string }) {
   const { set, loading, missing, commit, snapshot } = useBrickSet(id);
+  const { active } = usePlayers();
   const [view, setView] = useState<"diagram" | "photo">("diagram");
   const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
   const [preview, setPreview] = useState<number | null>(null);
@@ -33,8 +36,9 @@ export function StepPlayer({ id }: { id: string }) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const started = useRef(false);
 
-  const steps = set ? orderedSteps(set.pages, set.steps) : [];
-  const index = set ? stepIndex(steps, set.progress.currentStepId) : 0;
+  const progress = set && active ? progressFor(set, active.id) : null;
+  const steps = set && active ? playableSteps(set, active.id) : [];
+  const index = progress ? stepIndex(steps, progress.currentStepId) : 0;
   const shown = preview ?? index;
   const step = steps[index];
   const shownStep = steps[shown] ?? step;
@@ -42,34 +46,39 @@ export function StepPlayer({ id }: { id: string }) {
   useEffect(() => {
     if (started.current) return;
     const current = snapshot();
-    if (!current) return;
-    const ordered = orderedSteps(current.pages, current.steps);
-    if (ordered.length === 0) return;
+    if (!current || !active) return;
     started.current = true;
-    if (!current.progress.currentStepId) {
-      commit({ ...current, progress: { ...current.progress, currentStepId: ordered[0].id } });
+    const mine = progressFor(current, active.id);
+    const visible = playableSteps(current, active.id);
+    if (visible.length === 0) return;
+    const nextId = visible.some((item) => item.id === mine.currentStepId) ? mine.currentStepId : visible[0].id;
+    if (mine.currentStepId !== nextId) {
+      commit(savePlayerProgress(current, active.id, { ...mine, currentStepId: nextId }));
     }
-  }, [set, commit, snapshot]);
+  }, [set, active, commit, snapshot]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       const current = snapshot();
       if (!current) return;
-      const ordered = orderedSteps(current.pages, current.steps);
+      if (!active) return;
+      const ordered = playableSteps(current, active.id);
+      const mine = progressFor(current, active.id);
       if (event.key === "ArrowRight") {
         setPreview(null);
-        commit({ ...current, progress: goNext(ordered, current.progress) });
+        commit(savePlayerProgress(current, active.id, goNext(ordered, mine)));
       }
       if (event.key === "ArrowLeft") {
         setPreview(null);
-        commit({ ...current, progress: goBack(ordered, current.progress) });
+        commit(savePlayerProgress(current, active.id, goBack(ordered, mine)));
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [commit, snapshot]);
+  }, [active, commit, snapshot]);
 
-  if (loading) return <BenchLoading label="Opening the build" />;
+  if (loading || !active) return <BenchLoading label="Opening the build" />;
+  const player = active;
   if (missing || !set) {
     return (
       <p className="px-4 py-8">
@@ -77,7 +86,7 @@ export function StepPlayer({ id }: { id: string }) {
       </p>
     );
   }
-  if (!step || !shownStep) {
+  if (!progress || !step || !shownStep) {
     return (
       <main className="px-4 py-10 text-center">
         <p className="font-display text-2xl">No steps yet</p>
@@ -91,39 +100,43 @@ export function StepPlayer({ id }: { id: string }) {
   const sections = sectionSpans(steps);
   const section = sectionAt(sections, shown);
   const page = set.pages.find((item) => item.id === shownStep.pageId);
-  const checked = checkedIds(set.progress, step.id);
+  const checked = checkedIds(progress, step.id);
   const place = placementLabel(shownStep);
   const retake = page ? retakeMessage(page.retake) : null;
   const placementRetake = shownStep.parts.some((part) => part.placement.needsRetake);
   const atSectionStart = section != null && shown === section.from && shown > 0 && bagDismissed !== section.id;
 
+  function playingStep(current: NonNullable<ReturnType<typeof snapshot>>) {
+    const ordered = playableSteps(current, player.id);
+    return ordered[stepIndex(ordered, progressFor(current, player.id).currentStepId)];
+  }
+
   function shift(partId: string, poseIndex: number, axis: "x" | "y", delta: number) {
     const current = snapshot();
     if (!current) return;
-    const ordered = orderedSteps(current.pages, current.steps);
-    const active = ordered[stepIndex(ordered, current.progress.currentStepId)];
-    const part = active?.parts.find((item) => item.id === partId);
-    if (!active || !part) return;
-    commit(updatePartPlacement(current, active.id, partId, shiftPose(part.placement, poseIndex, axis, delta)));
+    const playing = playingStep(current);
+    const part = playing?.parts.find((item) => item.id === partId);
+    if (!playing || !part) return;
+    commit(updatePartPlacement(current, playing.id, partId, shiftPose(part.placement, poseIndex, axis, delta)));
   }
 
   function nudge(partId: string, axis: "along" | "row", delta: number) {
     const current = snapshot();
     if (!current) return;
-    const ordered = orderedSteps(current.pages, current.steps);
-    const active = ordered[stepIndex(ordered, current.progress.currentStepId)];
-    const part = active?.parts.find((item) => item.id === partId);
-    if (!active || !part) return;
-    commit(updatePartPlacement(current, active.id, partId, nudgeStud(part.placement, axis, delta)));
+    const playing = playingStep(current);
+    const part = playing?.parts.find((item) => item.id === partId);
+    if (!playing || !part) return;
+    commit(updatePartPlacement(current, playing.id, partId, nudgeStud(part.placement, axis, delta)));
   }
 
   function move(direction: "next" | "back") {
     const current = snapshot();
     if (!current) return;
     setPreview(null);
-    const ordered = orderedSteps(current.pages, current.steps);
-    const progress = direction === "next" ? goNext(ordered, current.progress) : goBack(ordered, current.progress);
-    commit({ ...current, progress });
+    const ordered = playableSteps(current, player.id);
+    const mine = progressFor(current, player.id);
+    const next = direction === "next" ? goNext(ordered, mine) : goBack(ordered, mine);
+    commit(savePlayerProgress(current, player.id, next));
     headingRef.current?.focus();
   }
 
@@ -131,13 +144,14 @@ export function StepPlayer({ id }: { id: string }) {
     if (preview == null) return;
     const current = snapshot();
     if (!current) return;
-    const ordered = orderedSteps(current.pages, current.steps);
-    commit({ ...current, progress: jumpTo(ordered, current.progress, preview) });
+    const ordered = playableSteps(current, player.id);
+    commit(savePlayerProgress(current, player.id, jumpTo(ordered, progressFor(current, player.id), preview)));
     setPreview(null);
   }
 
   return (
     <div className="stage-screen" data-testid="step-player">
+      <RoomSync setId={id} />
       <aside className="stage-parts" aria-label="Parts for this step">
         {shownStep.parts.length === 0 ? <p className="text-xs font-bold text-ink/70">No pieces</p> : null}
         {shownStep.parts.map((part) => {
@@ -155,7 +169,7 @@ export function StepPlayer({ id }: { id: string }) {
                 onClick={() => {
                   const current = snapshot();
                   if (!current) return;
-                  commit({ ...current, progress: togglePart(current.progress, step.id, part.id) });
+                  commit(savePlayerProgress(current, player.id, togglePart(progressFor(current, player.id), step.id, part.id)));
                 }}
                 className={`part-check ${on ? "part-check-on" : ""}`}
               >
@@ -179,11 +193,12 @@ export function StepPlayer({ id }: { id: string }) {
           drag.current = null;
           const current = snapshot();
           if (!current) return;
-          const ordered = orderedSteps(current.pages, current.steps);
-          const progress = applySwipe(ordered, current.progress, dx, dy);
-          if (progress.currentStepId !== current.progress.currentStepId) {
+          const ordered = playableSteps(current, player.id);
+          const mine = progressFor(current, player.id);
+          const next = applySwipe(ordered, mine, dx, dy);
+          if (next.currentStepId !== mine.currentStepId) {
             setPreview(null);
-            commit({ ...current, progress });
+            commit(savePlayerProgress(current, player.id, next));
           }
         }}
       >

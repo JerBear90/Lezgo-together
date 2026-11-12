@@ -11,22 +11,40 @@ export function useBrickSet(id: string) {
 
   useEffect(() => {
     let cancel = false;
-    getSet(id)
-      .then((row) => {
-        if (cancel) return;
-        ref.current = row;
-        setSet(row);
-      })
-      .catch(() => {
-        if (!cancel) setSet(null);
-      });
+    const load = () => {
+      getSet(id)
+        .then((row) => {
+          if (cancel) return;
+          ref.current = row;
+          setSet(row);
+        })
+        .catch(() => {
+          if (!cancel) setSet(null);
+        });
+    };
+    load();
+    const onRemote = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail;
+      if (detail === id) load();
+    };
+    window.addEventListener("lezgo-set", onRemote);
     return () => {
       cancel = true;
+      window.removeEventListener("lezgo-set", onRemote);
     };
   }, [id]);
 
   const commit = useCallback((next: BrickSet) => {
-    const stamped = { ...next, updatedAt: Date.now() };
+    const previous = ref.current;
+    const contentChanged =
+      !previous ||
+      previous.pages !== next.pages ||
+      previous.steps !== next.steps ||
+      previous.sections !== next.sections ||
+      previous.combine !== next.combine ||
+      previous.name !== next.name ||
+      previous.coverDataUrl !== next.coverDataUrl;
+    const stamped = { ...next, updatedAt: contentChanged ? Date.now() : (previous?.updatedAt ?? next.updatedAt) };
     ref.current = stamped;
     setSet(stamped);
     const write = queue.current.then(() => saveSet(stamped));
@@ -34,7 +52,7 @@ export function useBrickSet(id: string) {
       () => undefined,
       () => undefined,
     );
-    return stamped;
+    return write.then(() => stamped);
   }, []);
 
   return {

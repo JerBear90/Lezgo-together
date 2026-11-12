@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import { Nunito } from "next/font/google";
 import { AppShell } from "@/components/app-shell";
+import { PersistStorage } from "@/components/persist-storage";
+import { PlayerBar } from "@/components/player-bar";
 import "./globals.css";
 
 const nunito = Nunito({
@@ -25,11 +27,15 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${nunito.variable} h-full antialiased`}>
       <body>
+        <PersistStorage />
         <div className="desk">
-          <div className="phone">
-            <Suspense fallback={children}>
-              <AppShell>{children}</AppShell>
-            </Suspense>
+          <div className="phone flex h-dvh flex-col">
+            <PlayerBar />
+            <div className="min-h-0 flex-1 overflow-auto">
+              <Suspense fallback={children}>
+                <AppShell>{children}</AppShell>
+              </Suspense>
+            </div>
           </div>
         </div>
       </body>

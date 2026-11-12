@@ -336,6 +336,10 @@ body {
   }
 }
 
+.together-lobby {
+  background: radial-gradient(circle at 50% 0%, #8d74ff, #6d4aff 42%, #3a27a5);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     scroll-behavior: auto !important;

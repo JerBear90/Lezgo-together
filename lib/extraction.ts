@@ -5,8 +5,10 @@ import {
   PLACEMENT_FIELDS,
   UNCERTAIN_FIELDS,
   type Certainty,
+  type CombinePoint,
   type NormPoint,
   type ParsedExtraction,
+  type ParsedSection,
   type PartPlacement,
   type PartSpec,
   type PlacementUncertainField,
@@ -107,10 +109,32 @@ export const retakeSchema = z.object({
     .describe('Short reasons such as "too blurry" or "step 4 cut off". Empty when a retake is not needed.'),
 });
 
+export const sectionSchema = z.object({
+  name: z.string().describe("Sub-build name such as hull or cabin. Do not invent one."),
+  stepNumbers: z.array(z.number()).describe("Printed step numbers that belong to this sub-build."),
+  certainty: z
+    .enum(["certain", "uncertain"])
+    .describe("uncertain when you cannot tell where this sub-build ends. Do not guess a boundary."),
+  uncertaintyNote: z.string().nullable().describe("What is unclear about the boundary, or null."),
+});
+
+export const combineSchema = z.object({
+  description: z.string().describe("How the sub-builds join. If that is not shown, say so."),
+  certainty: z
+    .enum(["certain", "uncertain"])
+    .describe("uncertain when the booklet does not show where the sub-builds come together."),
+  uncertaintyNote: z.string().nullable(),
+});
+
 export const extractionSchema = z.object({
   pageSummary: z.string(),
   retake: retakeSchema,
   steps: z.array(extractedStepSchema),
+  sections: z
+    .array(sectionSchema)
+    .optional()
+    .describe("Separate sub-builds only when the page shows them. Mark an unclear boundary uncertain."),
+  combine: combineSchema.optional().describe("The joining step, or an uncertain note when it is not shown."),
 });
 
 export class ExtractionError extends Error {
@@ -149,7 +173,13 @@ Photo quality
 - If the photo is too blurry, dark, cropped, angled, or low-resolution to read reliably, set retake.needed to true.
 - reasons must name the problem in a few words, for example "too blurry" or "step 4 cut off".
 - Still return any steps you can read without guessing. If nothing on the page is readable, return an empty steps array.
-- Do not invent a typical build to hide a bad photo.`;
+- Do not invent a typical build to hide a bad photo.
+
+Sub-builds
+- When the page clearly shows separate sub-builds, such as a hull and a cabin, list them in sections with the step numbers that belong to each.
+- If you cannot tell where one sub-build ends, set that section certainty to "uncertain" and explain the unclear boundary in uncertaintyNote. Do not guess a split.
+- If the page does not show separate sub-builds, return a single section named "Whole build" covering every step on the page.
+- combine describes the step where those sub-builds come together. If the booklet does not show that join, set combine.certainty to "uncertain" and say so. Do not invent a joining step.`;
 
 const UNCLEAR_TEXT =
   /^(unknown|unclear|unsure|n\/a|na|\?+|tbd|not sure|cannot tell|can't tell|unreadable|-+|none)$/i;
@@ -199,8 +229,18 @@ export function parseExtraction(
     pageSummary: readString(raw.pageSummary ?? raw.summary) ?? "",
     retake,
     steps: numbered,
+    sections: readSections(raw, numbered),
+    combine: readCombine(raw),
   });
-  return parsed;
+  return {
+    ...parsed,
+    sections: parsed.sections ?? [],
+    combine: parsed.combine ?? {
+      description: "No separate joining step was found.",
+      certainty: "certain",
+      uncertaintyNote: null,
+    },
+  };
 }
 
 export function mockPageExtraction(pageOrder = 0): unknown {
@@ -277,6 +317,66 @@ export function continueStepNumbers(steps: StepSpec[], previousMaxStep: number):
   if (min > previousMaxStep) return steps;
   const shift = previousMaxStep - min + 1;
   return steps.map((step) => ({ ...step, stepNumber: step.stepNumber + shift }));
+}
+
+function readSections(raw: Loose, steps: StepSpec[]): ParsedSection[] {
+  const rows = raw.sections ?? raw.subBuilds ?? raw.groups;
+  if (!Array.isArray(rows) || rows.length === 0) return [wholeBuild(steps)];
+  const sections = rows
+    .map((row) => readOneSection(row))
+    .filter((section): section is ParsedSection => section !== null);
+  return sections.length > 0 ? sections : [wholeBuild(steps)];
+}
+
+function wholeBuild(steps: StepSpec[]): ParsedSection {
+  return {
+    name: "Whole build",
+    stepNumbers: steps.map((step) => step.stepNumber),
+    certainty: "certain",
+    uncertaintyNote: null,
+  };
+}
+
+function readOneSection(value: unknown): ParsedSection | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Loose;
+  const name = readString(row.name ?? row.title);
+  if (!name) return null;
+  const source = row.stepNumbers ?? row.steps;
+  const stepNumbers = Array.isArray(source)
+    ? source.map((item) => positiveInt(item)).filter((item): item is number => item !== null)
+    : [];
+  const note = cleanNote(row.uncertaintyNote ?? row.uncertainty_note ?? row.note);
+  const certainty = resolveCertainty(row.certainty, note);
+  return {
+    name,
+    stepNumbers,
+    certainty,
+    uncertaintyNote: certainty === "uncertain" ? note : null,
+  };
+}
+
+function readCombine(raw: Loose): CombinePoint {
+  const source = raw.combine ?? raw.joiningStep ?? raw.join;
+  if (!source || typeof source !== "object") {
+    return {
+      description: "No separate joining step was found.",
+      certainty: "certain",
+      uncertaintyNote: null,
+    };
+  }
+  const row = source as Loose;
+  const description =
+    readString(row.description ?? row.text) ?? "No separate joining step was found.";
+  const note = cleanNote(row.uncertaintyNote ?? row.note);
+  const doubt = Boolean((note && DOUBT.test(note)) || DOUBT.test(description));
+  const flagged = resolveCertainty(row.certainty, note);
+  const certainty: Certainty = flagged === "uncertain" || doubt ? "uncertain" : "certain";
+  return {
+    description,
+    certainty,
+    uncertaintyNote: certainty === "uncertain" ? note ?? "The joining step is not clear." : null,
+  };
 }
 
 function unwrap(input: unknown): Loose | null {

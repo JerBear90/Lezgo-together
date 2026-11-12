@@ -1,7 +1,44 @@
 import type { BuildStep, Part, SetProgress } from "./types";
 
 export function emptyProgress(): SetProgress {
-  return { currentStepId: null, checkedByStep: {} };
+  return {
+    currentStepId: null,
+    checkedByStep: {},
+    sheetScrollTop: 0,
+    imageScrollTop: 0,
+    zoom: 1,
+    updatedAt: 0,
+  };
+}
+
+export function normalizeProgress(progress: Partial<SetProgress> | null | undefined): SetProgress {
+  const base = emptyProgress();
+  if (!progress) return base;
+  const zoom = typeof progress.zoom === "number" && progress.zoom >= 1 ? Math.min(progress.zoom, 2.5) : 1;
+  return {
+    currentStepId: progress.currentStepId ?? null,
+    checkedByStep: progress.checkedByStep ?? {},
+    sheetScrollTop: positiveOrZero(progress.sheetScrollTop),
+    imageScrollTop: positiveOrZero(progress.imageScrollTop),
+    zoom,
+    updatedAt: progress.updatedAt ?? 0,
+  };
+}
+
+export function resumeLabel(steps: Pick<BuildStep, "id" | "stepNumber">[], progress: SetProgress): string | null {
+  if (!progress.currentStepId || steps.length === 0) return null;
+  const step = steps[stepIndex(steps, progress.currentStepId)];
+  if (!step) return null;
+  if (step.stepNumber <= 0) return "Continue where you left off: Combine";
+  return `Continue where you left off: Step ${step.stepNumber}`;
+}
+
+export function playerStatusLabel(name: string, steps: Pick<BuildStep, "id" | "stepNumber">[], progress: SetProgress): string {
+  if (!progress.currentStepId || steps.length === 0) return `${name} has not started`;
+  const step = steps[stepIndex(steps, progress.currentStepId)];
+  if (!step) return `${name} has not started`;
+  if (step.stepNumber <= 0) return `${name} is on the combine step`;
+  return `${name} is on step ${step.stepNumber}`;
 }
 
 export function stepIndex(steps: Pick<BuildStep, "id">[], currentStepId: string | null): number {
@@ -88,7 +125,7 @@ export function reconcileProgress(progress: SetProgress, steps: BuildStep[]): Se
   if (currentStepId && !known.has(currentStepId)) {
     currentStepId = steps[0]?.id ?? null;
   }
-  return { currentStepId, checkedByStep };
+  return { ...progress, currentStepId, checkedByStep };
 }
 
 export function checkedIds(progress: SetProgress, stepId: string): string[] {
@@ -97,4 +134,9 @@ export function checkedIds(progress: SetProgress, stepId: string): string[] {
 
 export function partById(step: BuildStep, partId: string): Part | undefined {
   return step.parts.find((part) => part.id === partId);
+}
+
+function positiveOrZero(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return 0;
+  return value;
 }

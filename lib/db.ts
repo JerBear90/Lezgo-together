@@ -1,16 +1,18 @@
-import type { BrickSet } from "./types";
+import { normalizeProgress } from "./player";
+import { defaultCombine } from "./sections";
+import type { BrickSet, SetProgress } from "./types";
 
 const DB_NAME = "lezgo";
+const DB_VERSION = 2;
 const STORE = "sets";
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
       const db = request.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        db.createObjectStore(STORE, { keyPath: "id" });
-      }
+      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "id" });
+      if (!db.objectStoreNames.contains("players")) db.createObjectStore("players", { keyPath: "id" });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
@@ -35,7 +37,7 @@ export async function listSets(): Promise<BrickSet[]> {
   });
   await transactionDone(tx);
   db.close();
-  return rows.sort((a, b) => b.updatedAt - a.updatedAt);
+  return rows.map(normalizeSet).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 export async function getSet(id: string): Promise<BrickSet | null> {
@@ -48,7 +50,25 @@ export async function getSet(id: string): Promise<BrickSet | null> {
   });
   await transactionDone(tx);
   db.close();
-  return row ?? null;
+  return row ? normalizeSet(row) : null;
+}
+
+function normalizeSet(raw: BrickSet): BrickSet {
+  const legacy = (raw as BrickSet & { progress?: SetProgress }).progress;
+  const stored = { ...(raw.progressByPlayer ?? {}) };
+  if (Object.keys(stored).length === 0 && legacy) stored.legacy = legacy;
+  const progressByPlayer: BrickSet["progressByPlayer"] = {};
+  for (const [playerId, progress] of Object.entries(stored)) {
+    progressByPlayer[playerId] = normalizeProgress(progress);
+  }
+  const { progress: _dropped, ...rest } = raw as BrickSet & { progress?: SetProgress };
+  void _dropped;
+  return {
+    ...rest,
+    progressByPlayer,
+    sections: raw.sections ?? [],
+    combine: raw.combine ?? defaultCombine(),
+  };
 }
 
 export async function saveSet(set: BrickSet): Promise<void> {
